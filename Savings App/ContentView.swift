@@ -87,12 +87,9 @@ struct ContentView: View {
         }
     }
 
-    // Sort time blocks: incomplete first (in natural order), then complete ones at bottom
+    // Time blocks in natural order (no longer sorting by completion)
     var sortedTimeBlocks: [TimeBlock] {
-        let allBlocks = TimeBlock.allCases
-        let incomplete = allBlocks.filter { !isSectionComplete($0) }
-        let complete = allBlocks.filter { isSectionComplete($0) }
-        return incomplete + complete
+        return TimeBlock.allCases
     }
 
     var currentStreak: Int {
@@ -579,16 +576,14 @@ struct TimeBlockCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Time block header (tappable when complete)
+            // Time block header (always tappable for dropdown)
             HStack {
-                // Tappable header area for completed sections
+                // Tappable header area for expand/collapse
                 Button(action: {
-                    if isComplete {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            isExpanded.toggle()
-                        }
-                        HapticManager.shared.lightTap()
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        isExpanded.toggle()
                     }
+                    HapticManager.shared.lightTap()
                 }) {
                     HStack {
                         Image(systemName: timeBlock.icon)
@@ -604,34 +599,25 @@ struct TimeBlockCard: View {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.nebulaCyan.opacity(0.6))
                                 .font(.subheadline)
-
-                            // Show hint to redo when collapsed
-                            if !isExpanded {
-                                Image(systemName: "arrow.counterclockwise.circle")
-                                    .foregroundColor(.nebulaLavender.opacity(0.4))
-                                    .font(.subheadline)
-                            }
                         }
+
+                        Spacer()
+
+                        // Chevron toggle (always visible)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(isComplete ? .nebulaLavender.opacity(0.5) : .nebulaLavender.opacity(0.7))
+                            .rotationEffect(.degrees(isExpanded ? 0 : -90))
                     }
                 }
                 .buttonStyle(.plain)
-                .disabled(!isComplete)
 
-                Spacer()
-
-                // Chevron toggle (only when complete)
-                if isComplete {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.nebulaLavender.opacity(0.5))
-                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
-                }
-
-                // Add stack button
+                // Add stack button - always bright
                 Button(action: onAddTap) {
                     Image(systemName: "plus.circle.fill")
-                        .foregroundColor(isComplete ? timeBlock.color.opacity(0.4) : timeBlock.color)
+                        .foregroundColor(timeBlock.color)
                         .font(.title2)
+                        .shadow(color: timeBlock.color.opacity(0.4), radius: 4)
                 }
             }
 

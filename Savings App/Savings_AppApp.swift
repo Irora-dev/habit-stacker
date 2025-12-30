@@ -46,24 +46,47 @@ struct Savings_AppApp: App {
 struct RootView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     @AppStorage("hasRequestedNotifications") private var hasRequestedNotifications: Bool = false
+    @AppStorage("shouldShowGuidedStackCreation") private var shouldShowGuidedStackCreation: Bool = false
     @StateObject private var authManager = AuthenticationManager.shared
     @State private var showMainApp: Bool = false
+    @State private var showGuidedCreateStack: Bool = false
 
     var body: some View {
         ZStack {
             // Flow: Onboarding -> Login -> HomeScreen -> MainApp
             if !hasCompletedOnboarding {
                 // First time user - show onboarding
-                OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)
-                    .transition(.opacity)
+                OnboardingView(
+                    hasCompletedOnboarding: $hasCompletedOnboarding,
+                    onCreateFirstStack: {
+                        shouldShowGuidedStackCreation = true
+                    }
+                )
+                .transition(.opacity)
             } else if authManager.authenticationState != .authenticated {
                 // Not logged in - show login
                 LoginView()
                     .transition(.opacity)
-            } else if showMainApp {
-                // Logged in and in main app
+            } else if showMainApp || shouldShowGuidedStackCreation {
+                // Logged in and in main app (or going directly to create first stack)
                 ContentView()
                     .transition(.opacity)
+                    .onAppear {
+                        // Trigger guided stack creation if needed
+                        if shouldShowGuidedStackCreation {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                showGuidedCreateStack = true
+                            }
+                        }
+                    }
+                    .sheet(isPresented: $showGuidedCreateStack) {
+                        GuidedCreateStackSheet(
+                            onComplete: {
+                                shouldShowGuidedStackCreation = false
+                                showGuidedCreateStack = false
+                            }
+                        )
+                    }
             } else {
                 // Logged in but at home screen
                 HomeScreenView(showMainApp: $showMainApp)
@@ -87,6 +110,24 @@ struct RootView: View {
             if newValue != .authenticated {
                 showMainApp = false
             }
+        }
+    }
+}
+
+// MARK: - Guided Create Stack Sheet
+struct GuidedCreateStackSheet: View {
+    @Environment(\.modelContext) private var modelContext
+    let onComplete: () -> Void
+
+    var body: some View {
+        CreateStackView(
+            timeBlock: .morning,
+            prefilledAnchor: "Waking Up",
+            prefilledStackName: "Wake Up Routine",
+            isGuidedMode: true
+        ) { newStack in
+            modelContext.insert(newStack)
+            onComplete()
         }
     }
 }

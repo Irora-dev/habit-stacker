@@ -8,6 +8,12 @@ import SwiftUI
 struct OnboardingView: View {
     @Binding var hasCompletedOnboarding: Bool
     @State private var currentPage: Int = 0
+    let onCreateFirstStack: () -> Void
+
+    init(hasCompletedOnboarding: Binding<Bool>, onCreateFirstStack: @escaping () -> Void = {}) {
+        self._hasCompletedOnboarding = hasCompletedOnboarding
+        self.onCreateFirstStack = onCreateFirstStack
+    }
 
     var body: some View {
         ZStack {
@@ -19,8 +25,11 @@ struct OnboardingView: View {
             case 1:
                 HabitLoopScreen(onNext: { currentPage = 2 })
             case 2:
-                WalkthroughScreen(onComplete: {
+                WalkthroughScreen(onComplete: { currentPage = 3 })
+            case 3:
+                GuidedFirstStackScreen(onComplete: {
                     hasCompletedOnboarding = true
+                    onCreateFirstStack()
                 })
             default:
                 WelcomeScreen(onNext: { currentPage = 1 })
@@ -41,63 +50,60 @@ struct WelcomeScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
+                .frame(height: 80)
 
             // Logo
-            Text("HabitTracker")
-                .font(.system(size: 36, weight: .bold, design: .rounded))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [.nebulaMagenta, .nebulaPurple, .nebulaCyan],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .shadow(color: .nebulaMagenta.opacity(0.5), radius: 10)
+            Image("AppLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 200, height: 200)
+                .shadow(color: .nebulaMagenta.opacity(0.4), radius: 20)
                 .opacity(showLogo ? 1 : 0)
                 .scaleEffect(showLogo ? 1 : 0.8)
 
             Spacer()
-                .frame(height: 60)
+                .frame(height: 50)
 
             // Main title
-            Text("Welcome to a better way of taking control over your day")
-                .font(.title2.bold())
+            Text("Take Back Control\nOver Your Day")
+                .font(.system(size: 32, weight: .bold))
                 .foregroundColor(.white)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+                .lineSpacing(6)
+                .frame(maxWidth: .infinity)
                 .opacity(showTitle ? 1 : 0)
                 .offset(y: showTitle ? 0 : 20)
 
             Spacer()
                 .frame(height: 24)
 
-            // Subtitle
+            // Subtitle - below header
             Text("People who stack their habits are 2-3x more likely to follow through on good habits compared to those who just set goals.")
-                .font(.subheadline)
+                .font(.system(size: 16))
                 .foregroundColor(.nebulaLavender.opacity(0.8))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .lineSpacing(5)
+                .padding(.horizontal, 32)
                 .opacity(showSubtitle ? 1 : 0)
                 .offset(y: showSubtitle ? 0 : 20)
 
             Spacer()
-            Spacer()
 
             // Next button
             Button(action: onNext) {
-                Text("Next")
-                    .font(.headline)
+                Text("Get Started")
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
-                    .padding()
+                    .padding(.vertical, 18)
                     .background(
-                        RoundedRectangle(cornerRadius: 16)
+                        RoundedRectangle(cornerRadius: 14)
                             .fill(Color.nebulaPurple)
                     )
                     .shadow(color: .nebulaPurple.opacity(0.4), radius: 8)
             }
-            .padding(.horizontal, 40)
-            .padding(.bottom, 50)
+            .padding(.horizontal, 32)
+            .padding(.bottom, 60)
             .opacity(showButton ? 1 : 0)
             .offset(y: showButton ? 0 : 20)
         }
@@ -135,62 +141,62 @@ struct HabitLoopScreen: View {
             Spacer()
 
             Text("The Habit Loop")
-                .font(.title.bold())
+                .font(.system(size: 28, weight: .bold))
                 .foregroundColor(.white)
-                .padding(.bottom, 40)
+                .padding(.bottom, 32)
 
             // Cue → Routine → Reward flow
-            VStack(spacing: 20) {
+            VStack(spacing: 12) {
                 // Cue
                 HabitLoopItem(
                     icon: "bell.fill",
                     title: "Cue",
-                    subtitle: "Your anchor habit triggers the stack",
+                    subtitle: "An anchor triggers your stack",
                     color: .nebulaGold,
                     isVisible: showCue
                 )
 
                 // Arrow 1
-                Image(systemName: "arrow.down")
-                    .font(.title2)
-                    .foregroundColor(.nebulaLavender.opacity(0.5))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.nebulaLavender.opacity(0.4))
                     .opacity(showArrow1 ? 1 : 0)
 
                 // Routine
                 HabitLoopItem(
                     icon: "repeat",
                     title: "Routine",
-                    subtitle: "Complete your stacked habits in order",
+                    subtitle: "Complete habits in order",
                     color: .nebulaCyan,
                     isVisible: showRoutine
                 )
 
                 // Arrow 2
-                Image(systemName: "arrow.down")
-                    .font(.title2)
-                    .foregroundColor(.nebulaLavender.opacity(0.5))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.nebulaLavender.opacity(0.4))
                     .opacity(showArrow2 ? 1 : 0)
 
                 // Reward
                 HabitLoopItem(
                     icon: "star.fill",
                     title: "Reward",
-                    subtitle: "Feel accomplished & build your streak",
+                    subtitle: "Build streaks & feel accomplished",
                     color: .nebulaMagenta,
                     isVisible: showReward
                 )
             }
-            .padding(.horizontal, 32)
+            .padding(.horizontal, 24)
 
             Spacer()
-                .frame(height: 40)
+                .frame(height: 32)
 
             // Explanation
             Text("Stack new habits onto existing ones to make them stick.")
-                .font(.subheadline)
+                .font(.system(size: 15))
                 .foregroundColor(.nebulaLavender.opacity(0.7))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .padding(.horizontal, 32)
                 .opacity(showExplanation ? 1 : 0)
 
             Spacer()
@@ -246,40 +252,41 @@ struct HabitLoopItem: View {
     let isVisible: Bool
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 14) {
             ZStack {
                 Circle()
                     .fill(color.opacity(0.2))
-                    .frame(width: 56, height: 56)
+                    .frame(width: 46, height: 46)
 
                 Circle()
-                    .stroke(color.opacity(0.5), lineWidth: 2)
-                    .frame(width: 56, height: 56)
+                    .stroke(color.opacity(0.5), lineWidth: 1.5)
+                    .frame(width: 46, height: 46)
 
                 Image(systemName: icon)
-                    .font(.title2)
+                    .font(.system(size: 18))
                     .foregroundColor(color)
             }
-            .shadow(color: color.opacity(0.4), radius: 8)
+            .shadow(color: color.opacity(0.3), radius: 6)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.headline)
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.white)
 
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.system(size: 13))
                     .foregroundColor(.nebulaLavender.opacity(0.7))
             }
 
             Spacer()
         }
-        .padding()
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 14)
                 .fill(Color.cardBackground.opacity(0.7))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: 14)
                         .stroke(color.opacity(0.2), lineWidth: 1)
                 )
         )
@@ -550,6 +557,121 @@ struct MockMainAppView: View {
                     .background(SpotlightFrameReporter(area: .timeBlocks))
                 }
                 .padding()
+            }
+        }
+    }
+}
+
+// MARK: - Guided First Stack Screen
+struct GuidedFirstStackScreen: View {
+    let onComplete: () -> Void
+
+    @State private var showContent: Bool = false
+    @State private var pulseAnimation: Bool = false
+
+    var body: some View {
+        ZStack {
+            CosmicBackgroundView()
+
+            VStack(spacing: 0) {
+                Spacer()
+
+                // Title section
+                VStack(spacing: 16) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 48))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.nebulaGold, .nebulaMagenta],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(color: .nebulaGold.opacity(0.5), radius: 10)
+
+                    Text("Let's Create Your First Stack")
+                        .font(.title2.bold())
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+
+                    Text("We'll help you build the perfect morning routine based on habits that successful people swear by.")
+                        .font(.subheadline)
+                        .foregroundColor(.nebulaLavender.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+                .opacity(showContent ? 1 : 0)
+                .offset(y: showContent ? 0 : 20)
+
+                Spacer()
+                    .frame(height: 60)
+
+                // Mock Morning section with highlighted + button
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "sunrise.fill")
+                            .foregroundColor(.nebulaGold)
+                            .font(.title2)
+                            .shadow(color: .nebulaGold.opacity(0.5), radius: 4)
+
+                        Text("Morning")
+                            .font(.headline)
+                            .foregroundColor(.white)
+
+                        Spacer()
+
+                        // Highlighted + button
+                        Button(action: onComplete) {
+                            ZStack {
+                                // Pulse ring
+                                Circle()
+                                    .stroke(Color.nebulaGold, lineWidth: 2)
+                                    .frame(width: 44, height: 44)
+                                    .scaleEffect(pulseAnimation ? 1.4 : 1.0)
+                                    .opacity(pulseAnimation ? 0 : 0.8)
+
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundColor(.nebulaGold)
+                                    .font(.system(size: 32))
+                                    .shadow(color: .nebulaGold.opacity(0.6), radius: 8)
+                            }
+                        }
+                    }
+
+                    Text("Tap + to create your Wake Up Routine")
+                        .font(.subheadline)
+                        .foregroundColor(.nebulaLavender.opacity(0.6))
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white.opacity(0.03))
+                        .cornerRadius(12)
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.cardBackground.opacity(0.7))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.nebulaGold.opacity(0.3), lineWidth: 2)
+                        )
+                )
+                .shadow(color: .nebulaGold.opacity(0.2), radius: 12)
+                .padding(.horizontal)
+                .opacity(showContent ? 1 : 0)
+                .offset(y: showContent ? 0 : 30)
+
+                Spacer()
+                Spacer()
+            }
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.6)) {
+                showContent = true
+            }
+
+            // Start pulse animation
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: false)) {
+                pulseAnimation = true
             }
         }
     }

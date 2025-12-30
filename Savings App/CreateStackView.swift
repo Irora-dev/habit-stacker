@@ -5,10 +5,19 @@
 
 import SwiftUI
 
+// MARK: - Suggested Habit Model
+struct SuggestedHabit: Identifiable {
+    let id = UUID()
+    let name: String
+    let icon: String
+}
+
 struct CreateStackView: View {
     let timeBlock: TimeBlock
     let onSave: (HabitStack) -> Void
     let prefilledAnchor: String?
+    let prefilledStackName: String?
+    let isGuidedMode: Bool
 
     @State private var stackName: String = ""
     @State private var anchorHabit: String = ""
@@ -20,12 +29,27 @@ struct CreateStackView: View {
     @State private var selectedDays: Set<Int> = Set(1...7)
     @Environment(\.dismiss) private var dismiss
 
-    init(timeBlock: TimeBlock, prefilledAnchor: String? = nil, onSave: @escaping (HabitStack) -> Void) {
+    // Suggested habits for morning routine
+    private let suggestedMorningHabits: [SuggestedHabit] = [
+        SuggestedHabit(name: "Meditation", icon: "brain.head.profile"),
+        SuggestedHabit(name: "Reading", icon: "book.fill"),
+        SuggestedHabit(name: "Journaling", icon: "pencil.and.outline"),
+        SuggestedHabit(name: "Skin Care", icon: "face.smiling"),
+        SuggestedHabit(name: "Stretching", icon: "figure.flexibility"),
+        SuggestedHabit(name: "Hydrate", icon: "drop.fill"),
+        SuggestedHabit(name: "Make Bed", icon: "bed.double.fill"),
+        SuggestedHabit(name: "Cold Shower", icon: "shower.fill")
+    ]
+
+    init(timeBlock: TimeBlock, prefilledAnchor: String? = nil, prefilledStackName: String? = nil, isGuidedMode: Bool = false, onSave: @escaping (HabitStack) -> Void) {
         self.timeBlock = timeBlock
         self.prefilledAnchor = prefilledAnchor
+        self.prefilledStackName = prefilledStackName
+        self.isGuidedMode = isGuidedMode
         self.onSave = onSave
-        // Initialize anchor habit with prefilled value if provided
+        // Initialize with prefilled values if provided
         self._anchorHabit = State(initialValue: prefilledAnchor ?? "")
+        self._stackName = State(initialValue: prefilledStackName ?? "")
     }
     
     var canSave: Bool {
@@ -68,7 +92,13 @@ struct CreateStackView: View {
                             }
                         }
                     }
-                    
+
+                    // Habits list
+                    habitsSection
+
+                    // Day selection
+                    daySelectionSection
+
                     // Reminder time
                     inputSection(title: "Remind Me At", placeholder: "") {
                         DatePicker("", selection: $reminderTime, displayedComponents: .hourAndMinute)
@@ -79,14 +109,7 @@ struct CreateStackView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 20)
                     }
-                    .padding(.bottom, 16)
 
-                    // Day selection
-                    daySelectionSection
-
-                    // Habits list
-                    habitsSection
-                    
                     // Save button
                     saveButton
                 }
@@ -255,36 +278,36 @@ struct CreateStackView: View {
     // MARK: - Habits Section
     var habitsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Additional Habits")
+            Text("Add Your Habits")
                 .font(.subheadline.bold())
                 .foregroundColor(.white)
 
             Text("Add habits to do after your anchor habit")
                 .font(.caption)
                 .foregroundColor(.nebulaLavender.opacity(0.6))
-            
-            // Existing habits
+
+            // Existing habits with reorder buttons
             ForEach(Array(habits.enumerated()), id: \.element.id) { index, habit in
                 habitRow(habit: habit, index: index)
             }
-            
+
             // Add new habit
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
                         .fill(Color.white.opacity(0.05))
                         .frame(width: 40, height: 40)
-                    
+
                     Image(systemName: newHabitName.isEmpty ? "plus" : detectIcon(for: newHabitName))
                         .foregroundColor(newHabitName.isEmpty ? .nebulaLavender.opacity(0.4) : timeBlock.color)
                 }
-                
+
                 TextField("Add a habit...", text: $newHabitName)
                     .textFieldStyle(CosmicTextFieldStyle())
                     .onSubmit {
                         addHabit()
                     }
-                
+
                 Button(action: addHabit) {
                     Image(systemName: "plus.circle.fill")
                         .font(.title2)
@@ -293,35 +316,114 @@ struct CreateStackView: View {
                 }
                 .disabled(newHabitName.isEmpty)
             }
+
+            // Suggested habits section (only in guided mode or for morning)
+            if isGuidedMode || timeBlock == .morning {
+                suggestedHabitsSection
+            }
+        }
+    }
+
+    // MARK: - Suggested Habits Section
+    var suggestedHabitsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+                .background(Color.nebulaLavender.opacity(0.2))
+                .padding(.vertical, 8)
+
+            Text("Suggested Habits")
+                .font(.subheadline.bold())
+                .foregroundColor(.white)
+
+            Text("Tap to add popular morning habits")
+                .font(.caption)
+                .foregroundColor(.nebulaLavender.opacity(0.6))
+
+            // Grid of suggested habits
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                ForEach(suggestedMorningHabits) { suggestion in
+                    // Only show if not already added
+                    if !habits.contains(where: { $0.name.lowercased() == suggestion.name.lowercased() }) {
+                        Button(action: {
+                            addSuggestedHabit(suggestion)
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: suggestion.icon)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(timeBlock.color)
+
+                                Text(suggestion.name)
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+                                    .lineLimit(1)
+
+                                Spacer()
+
+                                Image(systemName: "plus.circle")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(timeBlock.color.opacity(0.7))
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.cardBackground.opacity(0.7))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(timeBlock.color.opacity(0.2), lineWidth: 1)
+                                    )
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
     
     // MARK: - Habit Row
     func habitRow(habit: Habit, index: Int) -> some View {
-        HStack(spacing: 12) {
-            Text("\(index + 1)")
-                .font(.caption.bold())
-                .foregroundColor(.nebulaLavender.opacity(0.5))
-                .frame(width: 20)
-            
+        HStack(spacing: 10) {
+            // Reorder buttons
+            VStack(spacing: 4) {
+                Button(action: { moveHabitUp(at: index) }) {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(index > 0 ? timeBlock.color : .nebulaLavender.opacity(0.2))
+                }
+                .disabled(index == 0)
+
+                Button(action: { moveHabitDown(at: index) }) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(index < habits.count - 1 ? timeBlock.color : .nebulaLavender.opacity(0.2))
+                }
+                .disabled(index >= habits.count - 1)
+            }
+            .frame(width: 24)
+
             ZStack {
                 Circle()
                     .fill(timeBlock.color.opacity(0.15))
                     .frame(width: 40, height: 40)
-                
+
                 Circle()
                     .stroke(timeBlock.color.opacity(0.3), lineWidth: 1)
                     .frame(width: 40, height: 40)
-                
+
                 Image(systemName: habit.icon)
                     .foregroundColor(timeBlock.color)
             }
-            
-            Text(habit.name)
-                .foregroundColor(.white)
-            
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(habit.name)
+                    .foregroundColor(.white)
+                Text("Step \(index + 1)")
+                    .font(.caption2)
+                    .foregroundColor(.nebulaLavender.opacity(0.5))
+            }
+
             Spacer()
-            
+
             Button(action: { removeHabit(at: index) }) {
                 Image(systemName: "trash.circle.fill")
                     .foregroundColor(.nebulaLavender.opacity(0.4))
@@ -364,16 +466,65 @@ struct CreateStackView: View {
             icon: detectIcon(for: newHabitName),
             order: habits.count
         )
-        habits.append(habit)
+        withAnimation(.easeInOut(duration: 0.2)) {
+            habits.append(habit)
+        }
         newHabitName = ""
+        HapticManager.shared.lightTap()
     }
-    
+
+    func addSuggestedHabit(_ suggestion: SuggestedHabit) {
+        let habit = Habit(
+            name: suggestion.name,
+            icon: suggestion.icon,
+            order: habits.count
+        )
+        withAnimation(.easeInOut(duration: 0.2)) {
+            habits.append(habit)
+        }
+        HapticManager.shared.lightTap()
+    }
+
     func removeHabit(at index: Int) {
-        habits.remove(at: index)
+        _ = withAnimation(.easeInOut(duration: 0.2)) {
+            habits.remove(at: index)
+        }
         // Update order for remaining habits
         for (i, _) in habits.enumerated() {
             habits[i].order = i
         }
+    }
+
+    func moveHabit(from source: IndexSet, to destination: Int) {
+        habits.move(fromOffsets: source, toOffset: destination)
+        // Update order for all habits
+        for (i, _) in habits.enumerated() {
+            habits[i].order = i
+        }
+    }
+
+    func moveHabitUp(at index: Int) {
+        guard index > 0 else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            habits.swapAt(index, index - 1)
+            // Update order for all habits
+            for (i, _) in habits.enumerated() {
+                habits[i].order = i
+            }
+        }
+        HapticManager.shared.lightTap()
+    }
+
+    func moveHabitDown(at index: Int) {
+        guard index < habits.count - 1 else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            habits.swapAt(index, index + 1)
+            // Update order for all habits
+            for (i, _) in habits.enumerated() {
+                habits[i].order = i
+            }
+        }
+        HapticManager.shared.lightTap()
     }
     
     func saveStack() {
@@ -424,5 +575,10 @@ struct CosmicTextFieldStyle: TextFieldStyle {
 
 // MARK: - Preview
 #Preview {
-    CreateStackView(timeBlock: .morning) { _ in }
+    CreateStackView(
+        timeBlock: .morning,
+        prefilledAnchor: "Waking Up",
+        prefilledStackName: "Wake Up Routine",
+        isGuidedMode: true
+    ) { _ in }
 }
