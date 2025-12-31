@@ -577,7 +577,7 @@ struct TimeBlockCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Time block header (always tappable for dropdown)
-            HStack {
+            HStack(spacing: 16) {
                 // Tappable header area for expand/collapse
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.25)) {
@@ -602,13 +602,24 @@ struct TimeBlockCard: View {
                         }
 
                         Spacer()
-
-                        // Chevron toggle (always visible)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(isComplete ? .nebulaLavender.opacity(0.5) : .nebulaLavender.opacity(0.7))
-                            .rotationEffect(.degrees(isExpanded ? 0 : -90))
                     }
+                }
+                .buttonStyle(.plain)
+
+                // Chevron toggle button - separate for easier tapping
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        isExpanded.toggle()
+                    }
+                    HapticManager.shared.lightTap()
+                }) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(isComplete ? .nebulaLavender.opacity(0.5) : .nebulaLavender.opacity(0.8))
+                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                        .frame(width: 32, height: 32)
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
 
@@ -707,10 +718,18 @@ struct HabitStackCard: View {
 
             // Stack info
             VStack(alignment: .leading, spacing: 4) {
-                Text(stack.name)
-                    .font(.subheadline.bold())
-                    .foregroundColor(.white)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(stack.name)
+                        .font(.subheadline.bold())
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+
+                    if isComplete {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.nebulaCyan)
+                    }
+                }
 
                 HStack(spacing: 4) {
                     Image(systemName: "bell.fill")
