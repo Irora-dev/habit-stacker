@@ -38,7 +38,14 @@ struct Savings_AppApp: App {
         WindowGroup {
             RootView()
         }
-        .modelContainer(for: [HabitStack.self, Habit.self, SessionLog.self, HabitLog.self])
+        .modelContainer(for: [
+            CosmosUser.self,
+            HabitStack.self,
+            Habit.self,
+            HabitCompletion.self,
+            SessionLog.self,
+            HabitLog.self
+        ])
     }
 }
 

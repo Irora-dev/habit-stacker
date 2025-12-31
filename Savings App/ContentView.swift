@@ -58,11 +58,15 @@ enum TimeBlock: String, CaseIterable {
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \HabitStack.createdAt) private var habitStacks: [HabitStack]
+    @StateObject private var intelligence = IntelligenceEngine.shared
+    @StateObject private var subscriptionService = SubscriptionService.shared
     @State private var activeStack: HabitStack? = nil
     @State private var creatingStackFor: TimeBlock? = nil
     @State private var animationTrigger: UUID = UUID()
     @State private var showStats: Bool = false
     @State private var showInspiration: Bool = false
+    @State private var showInsights: Bool = false
+    @State private var showPaywall: Bool = false
     @State private var selectedAnchorTemplate: AnchorTemplate? = nil
     @State private var selectedSuggestedStack: SuggestedStack? = nil
 
@@ -136,7 +140,8 @@ struct ContentView: View {
                     HeaderView(
                         currentStreak: currentStreak,
                         onStreakTap: { showStats = true },
-                        onInspirationTap: { showInspiration = true }
+                        onInspirationTap: { showInspiration = true },
+                        onInsightsTap: { showInsights = true }
                     )
 
                     // Stats & Sun Arc
@@ -199,14 +204,31 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showStats) {
             StatsView(habitStacks: habitStacks)
         }
+        .sheet(isPresented: $showInsights) {
+            SuggestionsListView()
+        }
+        .sheet(isPresented: $showPaywall) {
+            CosmosPaywallView()
+        }
         .sheet(item: $selectedSuggestedStack) { suggestedStack in
             SuggestedStackDetailSheet(
                 suggestedStack: suggestedStack,
                 onAddToStacks: { stack in
+                    // Check premium limit
+                    if !subscriptionService.canCreateMoreStacks(currentCount: habitStacks.count) {
+                        selectedSuggestedStack = nil
+                        showPaywall = true
+                        return
+                    }
                     modelContext.insert(stack)
                     selectedSuggestedStack = nil
                 },
                 onStartNow: { stack in
+                    if !subscriptionService.canCreateMoreStacks(currentCount: habitStacks.count) {
+                        selectedSuggestedStack = nil
+                        showPaywall = true
+                        return
+                    }
                     modelContext.insert(stack)
                     selectedSuggestedStack = nil
                     // Small delay to let the sheet dismiss
@@ -221,16 +243,22 @@ struct ContentView: View {
             if oldValue != nil && newValue == nil {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     animationTrigger = UUID()
+                    // Re-analyze for insights
+                    intelligence.analyze(stacks: habitStacks)
                 }
             }
         }
         .onAppear {
             // Schedule notifications on app launch
             NotificationManager.shared.scheduleNotifications(for: habitStacks)
+            // Analyze habits for intelligence suggestions
+            intelligence.analyze(stacks: habitStacks)
         }
         .onChange(of: habitStacks.count) { _, _ in
             // Reschedule notifications when stacks are added/removed
             NotificationManager.shared.scheduleNotifications(for: habitStacks)
+            // Re-analyze for insights
+            intelligence.analyze(stacks: habitStacks)
         }
     }
 }
@@ -286,88 +314,530 @@ struct HeaderView: View {
     let currentStreak: Int
     let onStreakTap: () -> Void
     let onInspirationTap: () -> Void
+    let onInsightsTap: () -> Void
+
+    @State private var showStreakMessage = false
+    @StateObject private var intelligence = IntelligenceEngine.shared
+
+    private var streakMessage: String? {
+        StreakMessages.message(for: currentStreak)
+    }
+
+    private var hasHighPrioritySuggestions: Bool {
+        !intelligence.getHighPrioritySuggestions().isEmpty
+    }
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Today")
-                    .font(.title.bold())
-                    .foregroundColor(.white)
-                Text(Date().formatted(date: .abbreviated, time: .omitted))
-                    .font(.subheadline)
-                    .foregroundColor(.nebulaLavender.opacity(0.7))
-            }
-            Spacer()
-
-            // Inspiration button
-            Button(action: onInspirationTap) {
-                Image(systemName: "lightbulb.fill")
-                    .font(.title3)
-                    .foregroundColor(.nebulaGold)
-                    .padding(10)
-                    .background(Color.cardBackground.opacity(0.8))
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(Color.nebulaGold.opacity(0.3), lineWidth: 1)
-                    )
-            }
-
-            // Streak indicator (tappable)
-            Button(action: onStreakTap) {
-                HStack(spacing: 4) {
-                    Image(systemName: "flame.fill")
-                        .foregroundColor(.nebulaMagenta)
-                    Text("\(currentStreak)")
-                        .font(.headline.bold())
+        VStack(spacing: CosmosSpacing.sm) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Today")
+                        .font(.title.bold())
                         .foregroundColor(.white)
+                    Text(Date().formatted(date: .abbreviated, time: .omitted))
+                        .font(.subheadline)
+                        .foregroundColor(.nebulaLavender.opacity(0.7))
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.cardBackground.opacity(0.8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.nebulaMagenta.opacity(0.3), lineWidth: 1)
-                )
-                .cornerRadius(20)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Today, \(Date().formatted(date: .long, time: .omitted))")
+
+                Spacer()
+
+                // Insights button (if suggestions available)
+                if !intelligence.suggestions.isEmpty {
+                    Button(action: onInsightsTap) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 16))
+                                .foregroundColor(.nebulaCyan)
+                                .frame(width: 36, height: 36)
+                                .background(Color.cardBackground.opacity(0.8))
+                                .clipShape(Circle())
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.nebulaCyan.opacity(0.3), lineWidth: 1)
+                                )
+
+                            if hasHighPrioritySuggestions {
+                                Circle()
+                                    .fill(Color.nebulaMagenta)
+                                    .frame(width: 8, height: 8)
+                                    .offset(x: 2, y: -2)
+                            }
+                        }
+                    }
+                    .accessibilityLabel("View insights\(hasHighPrioritySuggestions ? ", has important notifications" : "")")
+                }
+
+                // Inspiration button
+                Button(action: onInspirationTap) {
+                    Image(systemName: "lightbulb.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.nebulaGold)
+                        .frame(width: 36, height: 36)
+                        .background(Color.cardBackground.opacity(0.8))
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(Color.nebulaGold.opacity(0.3), lineWidth: 1)
+                        )
+                }
+                .accessibilityLabel("Get inspiration for new habits")
+
+                // Streak indicator (tappable)
+                Button(action: {
+                    onStreakTap()
+                    if streakMessage != nil {
+                        showStreakMessage = true
+                    }
+                }) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.nebulaMagenta)
+                        .frame(width: 36, height: 36)
+                        .background(Color.cardBackground.opacity(0.8))
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(Color.nebulaMagenta.opacity(0.3), lineWidth: 1)
+                        )
+                }
+                .accessibilityLabel("\(currentStreak) day streak")
+                .accessibilityHint("Double tap to view statistics")
+
+                // Profile menu
+                ProfileMenuView()
             }
 
-            // Profile menu
-            ProfileMenuView()
+            // Streak milestone message
+            if let message = streakMessage, showStreakMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundColor(.nebulaGold)
+                    .padding(.horizontal, CosmosSpacing.md)
+                    .padding(.vertical, CosmosSpacing.sm)
+                    .background(
+                        Capsule()
+                            .fill(Color.nebulaGold.opacity(0.15))
+                    )
+                    .transition(.opacity.combined(with: .scale))
+                    .onAppear {
+                        HapticManager.shared.play(.success)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                            withAnimation(.cosmosStandard) {
+                                showStreakMessage = false
+                            }
+                        }
+                    }
+            }
         }
+        .animation(.cosmosStandard, value: showStreakMessage)
     }
 }
 
 // MARK: - Profile Menu
 struct ProfileMenuView: View {
-    @StateObject private var authManager = AuthenticationManager.shared
-    @State private var showSignOutAlert: Bool = false
+    @State private var showProfileSheet: Bool = false
 
     var body: some View {
-        Menu {
-            if let email = authManager.user?.email {
-                Label(email, systemImage: "envelope.fill")
-            }
-
-            Divider()
-
-            Button(role: .destructive, action: { showSignOutAlert = true }) {
-                Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
-            }
-        } label: {
-            Image(systemName: "person.circle.fill")
-                .font(.title2)
+        Button(action: { showProfileSheet = true }) {
+            Image(systemName: "person.fill")
+                .font(.system(size: 16))
                 .foregroundColor(.nebulaLavender)
-                .padding(.leading, 8)
+                .frame(width: 36, height: 36)
+                .background(Color.cardBackground.opacity(0.8))
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(Color.nebulaLavender.opacity(0.3), lineWidth: 1)
+                )
+        }
+        .sheet(isPresented: $showProfileSheet) {
+            ProfileView()
+        }
+    }
+}
+
+// MARK: - Profile View
+struct ProfileView: View {
+    @StateObject private var authManager = AuthenticationManager.shared
+    @StateObject private var subscriptionService = SubscriptionService.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var showSignOutAlert: Bool = false
+    @State private var showPaywall: Bool = false
+    @State private var notificationsEnabled: Bool = true
+    @State private var hapticFeedbackEnabled: Bool = true
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.cosmicBlack.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: CosmosSpacing.xl) {
+                        // Profile Header
+                        profileHeader
+
+                        // Premium Section
+                        premiumSection
+
+                        // Settings Sections
+                        settingsSection
+
+                        // Account Section
+                        accountSection
+
+                        // App Info
+                        appInfoSection
+                    }
+                    .padding()
+                }
+            }
+            .navigationTitle("Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .foregroundColor(.nebulaCyan)
+                }
+            }
+            .toolbarBackground(Color.cosmicBlack, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
         .alert("Sign Out", isPresented: $showSignOutAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Sign Out", role: .destructive) {
                 try? authManager.signOut()
+                dismiss()
             }
         } message: {
             Text("Are you sure you want to sign out?")
         }
+        .sheet(isPresented: $showPaywall) {
+            CosmosPaywallView()
+        }
+    }
+
+    // MARK: - Profile Header
+    private var profileHeader: some View {
+        VStack(spacing: CosmosSpacing.md) {
+            // Avatar
+            ZStack {
+                Circle()
+                    .fill(Color.nebulaPurple.opacity(0.2))
+                    .frame(width: 80, height: 80)
+
+                Circle()
+                    .stroke(Color.nebulaPurple.opacity(0.5), lineWidth: 2)
+                    .frame(width: 80, height: 80)
+
+                if let name = authManager.user?.displayName, let firstLetter = name.first {
+                    Text(String(firstLetter).uppercased())
+                        .font(.system(size: 32, weight: .bold))
+                        .foregroundColor(.nebulaPurple)
+                } else {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 32))
+                        .foregroundColor(.nebulaPurple)
+                }
+            }
+
+            // Name & Email
+            VStack(spacing: 4) {
+                if let name = authManager.user?.displayName {
+                    Text(name)
+                        .font(.title3.bold())
+                        .foregroundColor(.white)
+                }
+
+                if let email = authManager.user?.email {
+                    Text(email)
+                        .font(.subheadline)
+                        .foregroundColor(.nebulaLavender.opacity(0.7))
+                }
+            }
+
+            // Premium Badge
+            if subscriptionService.isPremium {
+                HStack(spacing: 6) {
+                    Image(systemName: "star.fill")
+                        .font(.caption)
+                    Text("Premium Member")
+                        .font(.caption.bold())
+                }
+                .foregroundColor(.nebulaGold)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(Color.nebulaGold.opacity(0.15))
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.nebulaGold.opacity(0.3), lineWidth: 1)
+                        )
+                )
+            }
+        }
+        .padding(.vertical, CosmosSpacing.lg)
+    }
+
+    // MARK: - Premium Section
+    private var premiumSection: some View {
+        VStack(alignment: .leading, spacing: CosmosSpacing.md) {
+            Text("Subscription")
+                .font(.headline)
+                .foregroundColor(.white)
+
+            if subscriptionService.isPremium {
+                // Already premium
+                CosmosCard {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .foregroundColor(.nebulaCyan)
+                                Text("Premium Active")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                            }
+                            Text("You have access to all features")
+                                .font(.caption)
+                                .foregroundColor(.nebulaLavender.opacity(0.7))
+                        }
+                        Spacer()
+                    }
+                }
+            } else {
+                // Upgrade prompt
+                Button(action: { showPaywall = true }) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "star.circle.fill")
+                                    .foregroundColor(.nebulaGold)
+                                Text("Upgrade to Premium")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                            }
+                            Text("Unlock unlimited stacks, insights & more")
+                                .font(.caption)
+                                .foregroundColor(.nebulaLavender.opacity(0.7))
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.subheadline)
+                            .foregroundColor(.nebulaLavender.opacity(0.5))
+                    }
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: CosmosRadius.lg)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.nebulaPurple.opacity(0.3), Color.nebulaMagenta.opacity(0.2)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: CosmosRadius.lg)
+                                    .stroke(Color.nebulaGold.opacity(0.3), lineWidth: 1)
+                            )
+                    )
+                }
+            }
+        }
+    }
+
+    // MARK: - Settings Section
+    private var settingsSection: some View {
+        VStack(alignment: .leading, spacing: CosmosSpacing.md) {
+            Text("Settings")
+                .font(.headline)
+                .foregroundColor(.white)
+
+            CosmosCard {
+                VStack(spacing: 0) {
+                    // Notifications
+                    SettingsRow(
+                        icon: "bell.fill",
+                        iconColor: .nebulaCyan,
+                        title: "Notifications"
+                    ) {
+                        Toggle("", isOn: $notificationsEnabled)
+                            .labelsHidden()
+                            .tint(.nebulaCyan)
+                    }
+
+                    Divider()
+                        .background(Color.nebulaLavender.opacity(0.1))
+
+                    // Haptic Feedback
+                    SettingsRow(
+                        icon: "hand.tap.fill",
+                        iconColor: .nebulaMagenta,
+                        title: "Haptic Feedback"
+                    ) {
+                        Toggle("", isOn: $hapticFeedbackEnabled)
+                            .labelsHidden()
+                            .tint(.nebulaMagenta)
+                    }
+
+                    Divider()
+                        .background(Color.nebulaLavender.opacity(0.1))
+
+                    // App Icon (Premium)
+                    SettingsRow(
+                        icon: "app.fill",
+                        iconColor: .nebulaPurple,
+                        title: "App Icon",
+                        isPremium: !subscriptionService.isPremium
+                    ) {
+                        HStack(spacing: 4) {
+                            Text("Default")
+                                .font(.subheadline)
+                                .foregroundColor(.nebulaLavender.opacity(0.5))
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.nebulaLavender.opacity(0.3))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Account Section
+    private var accountSection: some View {
+        VStack(alignment: .leading, spacing: CosmosSpacing.md) {
+            Text("Account")
+                .font(.headline)
+                .foregroundColor(.white)
+
+            CosmosCard {
+                VStack(spacing: 0) {
+                    // Restore Purchases
+                    Button(action: {
+                        Task {
+                            await subscriptionService.restorePurchases()
+                        }
+                    }) {
+                        SettingsRow(
+                            icon: "arrow.clockwise",
+                            iconColor: .nebulaGold,
+                            title: "Restore Purchases"
+                        ) {
+                            if subscriptionService.isLoading {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            }
+                        }
+                    }
+
+                    Divider()
+                        .background(Color.nebulaLavender.opacity(0.1))
+
+                    // Export Data
+                    Button(action: {}) {
+                        SettingsRow(
+                            icon: "square.and.arrow.up",
+                            iconColor: .nebulaCyan,
+                            title: "Export Data"
+                        ) {
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.nebulaLavender.opacity(0.3))
+                        }
+                    }
+
+                    Divider()
+                        .background(Color.nebulaLavender.opacity(0.1))
+
+                    // Sign Out
+                    Button(action: { showSignOutAlert = true }) {
+                        SettingsRow(
+                            icon: "rectangle.portrait.and.arrow.right",
+                            iconColor: .nebulaMagenta,
+                            title: "Sign Out",
+                            titleColor: .nebulaMagenta
+                        ) {
+                            EmptyView()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - App Info Section
+    private var appInfoSection: some View {
+        VStack(spacing: CosmosSpacing.sm) {
+            Text("Stakk")
+                .font(.caption)
+                .foregroundColor(.nebulaLavender.opacity(0.5))
+
+            Text("Version 1.0.0")
+                .font(.caption2)
+                .foregroundColor(.nebulaLavender.opacity(0.3))
+
+            HStack(spacing: CosmosSpacing.lg) {
+                Button(action: {}) {
+                    Text("Privacy Policy")
+                        .font(.caption2)
+                        .foregroundColor(.nebulaLavender.opacity(0.5))
+                }
+
+                Text("•")
+                    .foregroundColor(.nebulaLavender.opacity(0.3))
+
+                Button(action: {}) {
+                    Text("Terms of Service")
+                        .font(.caption2)
+                        .foregroundColor(.nebulaLavender.opacity(0.5))
+                }
+            }
+        }
+        .padding(.top, CosmosSpacing.lg)
+    }
+}
+
+// MARK: - Settings Row
+struct SettingsRow<Accessory: View>: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    var titleColor: Color = .white
+    var isPremium: Bool = false
+    @ViewBuilder let accessory: () -> Accessory
+
+    var body: some View {
+        HStack(spacing: CosmosSpacing.md) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundColor(iconColor)
+                .frame(width: 32, height: 32)
+                .background(iconColor.opacity(0.15))
+                .cornerRadius(8)
+
+            Text(title)
+                .font(.subheadline)
+                .foregroundColor(titleColor)
+
+            if isPremium {
+                Text("PRO")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.nebulaGold)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.nebulaGold.opacity(0.2))
+                    .cornerRadius(4)
+            }
+
+            Spacer()
+
+            accessory()
+        }
+        .padding(.vertical, CosmosSpacing.md)
+        .contentShape(Rectangle())
     }
 }
 
@@ -571,19 +1041,24 @@ struct TimeBlockCard: View {
     let onStackTap: (HabitStack) -> Void
     let onAddTap: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     @State private var isExpanded: Bool = true
     @State private var hasAutoCollapsed: Bool = false
 
+    private var animation: Animation {
+        reduceMotion ? .linear(duration: 0.01) : .cosmosStandard
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: CosmosSpacing.md) {
             // Time block header (always tappable for dropdown)
-            HStack(spacing: 16) {
+            HStack(spacing: CosmosSpacing.lg) {
                 // Tappable header area for expand/collapse
                 Button(action: {
-                    withAnimation(.easeInOut(duration: 0.25)) {
+                    withAnimation(animation) {
                         isExpanded.toggle()
                     }
-                    HapticManager.shared.lightTap()
+                    HapticManager.shared.play(.lightTap)
                 }) {
                     HStack {
                         Image(systemName: timeBlock.icon)
@@ -605,13 +1080,15 @@ struct TimeBlockCard: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("\(timeBlock.rawValue) section\(isComplete ? ", completed" : "")")
+                .accessibilityHint(isExpanded ? "Double tap to collapse" : "Double tap to expand")
 
                 // Chevron toggle button - separate for easier tapping
                 Button(action: {
-                    withAnimation(.easeInOut(duration: 0.25)) {
+                    withAnimation(animation) {
                         isExpanded.toggle()
                     }
-                    HapticManager.shared.lightTap()
+                    HapticManager.shared.play(.lightTap)
                 }) {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 13, weight: .semibold))
@@ -619,9 +1096,10 @@ struct TimeBlockCard: View {
                         .rotationEffect(.degrees(isExpanded ? 0 : -90))
                         .frame(width: 32, height: 32)
                         .background(Color.white.opacity(0.05))
-                        .cornerRadius(8)
+                        .cornerRadius(CosmosRadius.sm)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(isExpanded ? "Collapse section" : "Expand section")
 
                 // Add stack button - always bright
                 Button(action: onAddTap) {
@@ -630,34 +1108,38 @@ struct TimeBlockCard: View {
                         .font(.title2)
                         .shadow(color: timeBlock.color.opacity(0.4), radius: 4)
                 }
+                .accessibilityLabel("Add new stack to \(timeBlock.rawValue)")
             }
 
             // Show stacks or placeholder (collapsible when complete)
             if isExpanded {
                 if stacks.isEmpty {
-                    Text("No stacks yet — tap + to create one")
+                    Text("No habits yet. Tap + to create your first one.")
                         .font(.subheadline)
                         .foregroundColor(.nebulaLavender.opacity(0.5))
                         .padding()
                         .frame(maxWidth: .infinity)
                         .background(Color.white.opacity(0.03))
-                        .cornerRadius(12)
+                        .cornerRadius(CosmosRadius.md)
                 } else {
                     ForEach(stacks) { stack in
                         HabitStackCard(stack: stack)
                             .onTapGesture {
                                 onStackTap(stack)
                             }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("\(stack.name), \(stack.habits.filter { $0.isCompleted }.count) of \(stack.habits.count) habits completed")
+                            .accessibilityHint("Double tap to start session")
                     }
                 }
             }
         }
         .padding()
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: CosmosRadius.lg)
                 .fill(Color.cardBackground.opacity(isComplete ? 0.4 : 0.7))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: CosmosRadius.lg)
                         .stroke(isComplete ? Color.nebulaCyan.opacity(0.2) : timeBlock.color.opacity(0.15), lineWidth: 1)
                 )
         )
@@ -665,7 +1147,8 @@ struct TimeBlockCard: View {
         .onChange(of: isComplete) { wasComplete, nowComplete in
             // Auto-collapse when section becomes complete
             if nowComplete && !wasComplete && !hasAutoCollapsed {
-                withAnimation(.easeInOut(duration: 0.3).delay(0.5)) {
+                let delayedAnimation = reduceMotion ? animation : animation.delay(0.5)
+                withAnimation(delayedAnimation) {
                     isExpanded = false
                     hasAutoCollapsed = true
                 }
@@ -781,5 +1264,12 @@ struct HabitStackCard: View {
 // MARK: - Preview
 #Preview {
     ContentView()
-        .modelContainer(for: [HabitStack.self, Habit.self], inMemory: true)
+        .modelContainer(for: [
+            CosmosUser.self,
+            HabitStack.self,
+            Habit.self,
+            HabitCompletion.self,
+            SessionLog.self,
+            HabitLog.self
+        ], inMemory: true)
 }

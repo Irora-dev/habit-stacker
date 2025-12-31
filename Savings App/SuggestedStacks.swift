@@ -965,7 +965,7 @@ extension SuggestedStack: Equatable {
 
 struct SuggestedStacksSection: View {
     let onStackTap: (SuggestedStack) -> Void
-    @State private var isExpanded: Bool = true
+    @State private var isExpanded: Bool = false
 
     private var relevantStacks: [SuggestedStack] {
         SuggestedStacksData.getRelevantStacks()
