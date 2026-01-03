@@ -161,10 +161,10 @@ struct StreakMessages {
 
 // MARK: - Feature Limits (Free Tier)
 struct FeatureLimits {
-    static let freeHabitStacks = 2
-    static let freeHabitsPerStack = 4
+    static let freeStacksPerTimeBlock = 2  // 2 per time block = 8 total
+    static let freeHabitsPerStack = Int.max // Unlimited habits per stack in free tier
     static let freeCalendarWeeks = 4
-    static let maxFreeHabitsTotal = 8
+    static let maxFreeStacksTotal = 8  // 2 stacks x 4 time blocks
 }
 
 // MARK: - Subscription Tier
@@ -183,37 +183,37 @@ enum SubscriptionTier: String, Codable {
 // MARK: - Premium Features
 enum PremiumFeature: String, CaseIterable {
     case unlimitedStacks
-    case unlimitedHabits
     case yearCalendar
     case habitInsights
     case customIcons
     case streakRecovery
     case advancedStats
     case cloudSync
+    case minimalistMode
 
     var displayName: String {
         switch self {
         case .unlimitedStacks: return "Unlimited Stacks"
-        case .unlimitedHabits: return "Unlimited Habits"
         case .yearCalendar: return "52-Week Calendar"
         case .habitInsights: return "Habit Insights"
         case .customIcons: return "Custom Icons"
         case .streakRecovery: return "Streak Recovery"
         case .advancedStats: return "Advanced Statistics"
         case .cloudSync: return "Cloud Sync"
+        case .minimalistMode: return "Minimalist Mode"
         }
     }
 
     var description: String {
         switch self {
         case .unlimitedStacks: return "Create as many habit stacks as you need"
-        case .unlimitedHabits: return "Add unlimited habits to each stack"
         case .yearCalendar: return "View your entire year's progress at a glance"
         case .habitInsights: return "Get personalized suggestions and patterns"
         case .customIcons: return "Choose from hundreds of custom icons"
         case .streakRecovery: return "Recover broken streaks once per month"
         case .advancedStats: return "Deep analytics on your habit performance"
         case .cloudSync: return "Sync across all your devices"
+        case .minimalistMode: return "Clean, distraction-free theme"
         }
     }
 }

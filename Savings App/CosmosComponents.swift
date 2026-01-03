@@ -140,16 +140,27 @@ struct CosmosIconButton: View {
 struct CosmosCard<Content: View>: View {
     let opacity: CGFloat
     let borderColor: Color
+    var isMinimalist: Bool = ThemeManager.shared.isMinimalist
     let content: Content
 
     init(
         opacity: CGFloat = 0.7,
         borderColor: Color = .nebulaLavender,
+        isMinimalist: Bool = ThemeManager.shared.isMinimalist,
         @ViewBuilder content: () -> Content
     ) {
         self.opacity = opacity
         self.borderColor = borderColor
+        self.isMinimalist = isMinimalist
         self.content = content()
+    }
+
+    private var cardBg: Color {
+        isMinimalist ? .minCard : .cardBackground
+    }
+
+    private var strokeColor: Color {
+        isMinimalist ? .minSubtle : borderColor
     }
 
     var body: some View {
@@ -157,10 +168,10 @@ struct CosmosCard<Content: View>: View {
             .padding(CosmosSpacing.md)
             .background(
                 RoundedRectangle(cornerRadius: CosmosRadius.lg)
-                    .fill(Color.cardBackground.opacity(opacity))
+                    .fill(cardBg.opacity(opacity))
                     .overlay(
                         RoundedRectangle(cornerRadius: CosmosRadius.lg)
-                            .stroke(borderColor.opacity(0.1), lineWidth: 1)
+                            .stroke(strokeColor.opacity(0.1), lineWidth: 1)
                     )
             )
     }
@@ -397,33 +408,52 @@ struct CosmosTextField: View {
     let placeholder: String
     @Binding var text: String
     let icon: String?
+    var isMinimalist: Bool = ThemeManager.shared.isMinimalist
 
     init(
         _ placeholder: String,
         text: Binding<String>,
-        icon: String? = nil
+        icon: String? = nil,
+        isMinimalist: Bool = ThemeManager.shared.isMinimalist
     ) {
         self.placeholder = placeholder
         self._text = text
         self.icon = icon
+        self.isMinimalist = isMinimalist
+    }
+
+    private var cardBg: Color {
+        isMinimalist ? .minCard : .cardBackground
+    }
+
+    private var textPrimary: Color {
+        isMinimalist ? .minTextPrimary : .white
+    }
+
+    private var textSecondary: Color {
+        isMinimalist ? .minTextTertiary : .nebulaLavender.opacity(0.5)
+    }
+
+    private var strokeColor: Color {
+        isMinimalist ? .minSubtle : .nebulaLavender
     }
 
     var body: some View {
         HStack(spacing: CosmosSpacing.sm) {
             if let icon = icon {
                 Image(systemName: icon)
-                    .foregroundColor(.nebulaLavender.opacity(0.5))
+                    .foregroundColor(textSecondary)
             }
 
             TextField(placeholder, text: $text)
-                .foregroundColor(.white)
+                .foregroundColor(textPrimary)
         }
         .padding()
-        .background(Color.cardBackground.opacity(0.7))
+        .background(cardBg.opacity(0.7))
         .cornerRadius(CosmosRadius.md)
         .overlay(
             RoundedRectangle(cornerRadius: CosmosRadius.md)
-                .stroke(Color.nebulaLavender.opacity(0.1), lineWidth: 1)
+                .stroke(strokeColor.opacity(0.1), lineWidth: 1)
         )
         .accessibilityLabel(placeholder)
     }

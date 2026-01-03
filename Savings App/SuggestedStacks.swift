@@ -965,10 +965,28 @@ extension SuggestedStack: Equatable {
 
 struct SuggestedStacksSection: View {
     let onStackTap: (SuggestedStack) -> Void
+    var isMinimalist: Bool = ThemeManager.shared.isMinimalist
     @State private var isExpanded: Bool = false
 
     private var relevantStacks: [SuggestedStack] {
         SuggestedStacksData.getRelevantStacks()
+    }
+
+    // Theme colors
+    private var accentGold: Color {
+        isMinimalist ? .minWarning : .nebulaGold
+    }
+
+    private var textPrimary: Color {
+        isMinimalist ? .minTextPrimary : .white
+    }
+
+    private var textSecondary: Color {
+        isMinimalist ? .minTextTertiary : .nebulaLavender.opacity(0.5)
+    }
+
+    private var textTertiary: Color {
+        isMinimalist ? .minTextTertiary : .nebulaLavender.opacity(0.6)
     }
 
     var body: some View {
@@ -982,24 +1000,24 @@ struct SuggestedStacksSection: View {
             }) {
                 HStack {
                     Image(systemName: "sparkles")
-                        .foregroundColor(.nebulaGold)
+                        .foregroundColor(accentGold)
                         .font(.subheadline)
 
                     Text("Suggested Stacks")
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(textPrimary)
 
                     Spacer()
 
                     if isExpanded {
                         Text("Swipe for more")
                             .font(.caption)
-                            .foregroundColor(.nebulaLavender.opacity(0.5))
+                            .foregroundColor(textSecondary)
                     }
 
                     Image(systemName: "chevron.down")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.nebulaLavender.opacity(0.6))
+                        .foregroundColor(textTertiary)
                         .rotationEffect(.degrees(isExpanded ? 0 : -90))
                 }
             }
@@ -1010,7 +1028,7 @@ struct SuggestedStacksSection: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(relevantStacks) { stack in
-                            SuggestedStackCard(stack: stack)
+                            SuggestedStackCard(stack: stack, isMinimalist: isMinimalist)
                                 .onTapGesture {
                                     HapticManager.shared.lightTap()
                                     onStackTap(stack)
@@ -1030,6 +1048,28 @@ struct SuggestedStacksSection: View {
 
 struct SuggestedStackCard: View {
     let stack: SuggestedStack
+    var isMinimalist: Bool = ThemeManager.shared.isMinimalist
+
+    // Theme colors
+    private var accentColor: Color {
+        isMinimalist ? .white : stack.timeBlock.color
+    }
+
+    private var textPrimary: Color {
+        isMinimalist ? .minTextPrimary : .white
+    }
+
+    private var textSecondary: Color {
+        isMinimalist ? .minTextSecondary : .nebulaLavender.opacity(0.6)
+    }
+
+    private var textTertiary: Color {
+        isMinimalist ? .minTextTertiary : .nebulaLavender.opacity(0.8)
+    }
+
+    private var cardBg: Color {
+        isMinimalist ? .minCard : .cardBackground
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1037,12 +1077,12 @@ struct SuggestedStackCard: View {
             HStack {
                 ZStack {
                     Circle()
-                        .fill(stack.timeBlock.color.opacity(0.2))
+                        .fill(accentColor.opacity(0.2))
                         .frame(width: 36, height: 36)
 
                     Image(systemName: stack.icon)
                         .font(.system(size: 16))
-                        .foregroundColor(stack.timeBlock.color)
+                        .foregroundColor(accentColor)
                 }
 
                 Spacer()
@@ -1054,17 +1094,17 @@ struct SuggestedStackCard: View {
                     Text(stack.timeBlock.rawValue)
                         .font(.system(size: 10, weight: .medium))
                 }
-                .foregroundColor(stack.timeBlock.color)
+                .foregroundColor(accentColor)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(stack.timeBlock.color.opacity(0.15))
+                .background(accentColor.opacity(0.15))
                 .cornerRadius(8)
             }
 
             // Stack Name
             Text(stack.name)
                 .font(.subheadline.bold())
-                .foregroundColor(.white)
+                .foregroundColor(textPrimary)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -1075,25 +1115,28 @@ struct SuggestedStackCard: View {
                 Text("\(stack.habits.count + 1) habits")
                     .font(.caption)
             }
-            .foregroundColor(.nebulaLavender.opacity(0.6))
+            .foregroundColor(textSecondary)
 
             // Category tag
             Text(stack.category.rawValue)
                 .font(.system(size: 9, weight: .medium))
-                .foregroundColor(.nebulaLavender.opacity(0.8))
+                .foregroundColor(textTertiary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(Color.white.opacity(0.08))
+                .background(isMinimalist ? Color.minSubtle : Color.white.opacity(0.08))
                 .cornerRadius(6)
         }
         .padding(12)
         .frame(width: 150, height: 140)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.cardBackground.opacity(0.8))
+                .fill(cardBg.opacity(0.8))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(stack.timeBlock.color.opacity(0.2), lineWidth: 1)
+                        .stroke(
+                            isMinimalist ? Color.minSubtle.opacity(0.2) : stack.timeBlock.color.opacity(0.2),
+                            lineWidth: 1
+                        )
                 )
         )
     }

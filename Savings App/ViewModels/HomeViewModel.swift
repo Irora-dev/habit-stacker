@@ -105,8 +105,8 @@ class HomeViewModel {
         }
     }
 
-    func canCreateMoreStacks(currentCount: Int) -> Bool {
-        subscriptionService.canCreateMoreStacks(currentCount: currentCount)
+    func canCreateStack(inTimeBlock timeBlock: String, currentCount: Int) -> Bool {
+        subscriptionService.canCreateStack(inTimeBlock: timeBlock, currentCount: currentCount)
     }
 
     func showPremiumPaywall() {
@@ -118,8 +118,9 @@ class HomeViewModel {
     }
 
     // MARK: - Suggested Stack Actions
-    func addSuggestedStack(_ stack: HabitStack, currentCount: Int, modelContext: ModelContext) {
-        if !canCreateMoreStacks(currentCount: currentCount) {
+    func addSuggestedStack(_ stack: HabitStack, stacks: [HabitStack], modelContext: ModelContext) {
+        let stacksInTimeBlock = stacks.filter { $0.timeBlock == stack.timeBlock }.count
+        if !canCreateStack(inTimeBlock: stack.timeBlock.rawValue, currentCount: stacksInTimeBlock) {
             selectedSuggestedStack = nil
             showPaywall = true
             return
@@ -128,8 +129,9 @@ class HomeViewModel {
         selectedSuggestedStack = nil
     }
 
-    func startSuggestedStack(_ stack: HabitStack, currentCount: Int, modelContext: ModelContext) {
-        if !canCreateMoreStacks(currentCount: currentCount) {
+    func startSuggestedStack(_ stack: HabitStack, stacks: [HabitStack], modelContext: ModelContext) {
+        let stacksInTimeBlock = stacks.filter { $0.timeBlock == stack.timeBlock }.count
+        if !canCreateStack(inTimeBlock: stack.timeBlock.rawValue, currentCount: stacksInTimeBlock) {
             selectedSuggestedStack = nil
             showPaywall = true
             return

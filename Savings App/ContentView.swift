@@ -69,6 +69,7 @@ struct ContentView: View {
     @State private var showPaywall: Bool = false
     @State private var selectedAnchorTemplate: AnchorTemplate? = nil
     @State private var selectedSuggestedStack: SuggestedStack? = nil
+    @State private var isMinimalistMode: Bool = ThemeManager.shared.isMinimalist
 
     var totalCompletedToday: Int {
         habitStacks.flatMap { $0.habits }.filter { $0.isCompleted }.count
@@ -132,7 +133,7 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             // Cosmic background
-            CosmicBackgroundView()
+            CosmicBackgroundView(isMinimalist: isMinimalistMode)
 
             ScrollView {
                 VStack(spacing: 24) {
@@ -141,16 +142,17 @@ struct ContentView: View {
                         currentStreak: currentStreak,
                         onStreakTap: { showStats = true },
                         onInspirationTap: { showInspiration = true },
-                        onInsightsTap: { showInsights = true }
+                        onInsightsTap: { showInsights = true },
+                        isMinimalist: isMinimalistMode
                     )
 
                     // Stats & Sun Arc
-                    TodayStatsView(completedCount: totalCompletedToday, animationTrigger: animationTrigger)
+                    TodayStatsView(completedCount: totalCompletedToday, animationTrigger: animationTrigger, isMinimalist: isMinimalistMode)
 
                     // Suggested Stacks Section
                     SuggestedStacksSection(onStackTap: { stack in
                         selectedSuggestedStack = stack
-                    })
+                    }, isMinimalist: isMinimalistMode)
 
                     // Time Blocks - completed sections move to bottom
                     ForEach(sortedTimeBlocks, id: \.self) { block in
@@ -163,7 +165,8 @@ struct ContentView: View {
                             },
                             onAddTap: {
                                 creatingStackFor = block
-                            }
+                            },
+                            isMinimalist: isMinimalistMode
                         )
                     }
                     .animation(.easeInOut(duration: 0.3), value: sortedTimeBlocks)
@@ -215,7 +218,8 @@ struct ContentView: View {
                 suggestedStack: suggestedStack,
                 onAddToStacks: { stack in
                     // Check premium limit
-                    if !subscriptionService.canCreateMoreStacks(currentCount: habitStacks.count) {
+                    let stacksInTimeBlock = habitStacks.filter { $0.timeBlock == stack.timeBlock }.count
+                    if !subscriptionService.canCreateStack(inTimeBlock: stack.timeBlock.rawValue, currentCount: stacksInTimeBlock) {
                         selectedSuggestedStack = nil
                         showPaywall = true
                         return
@@ -224,7 +228,8 @@ struct ContentView: View {
                     selectedSuggestedStack = nil
                 },
                 onStartNow: { stack in
-                    if !subscriptionService.canCreateMoreStacks(currentCount: habitStacks.count) {
+                    let stacksInTimeBlock = habitStacks.filter { $0.timeBlock == stack.timeBlock }.count
+                    if !subscriptionService.canCreateStack(inTimeBlock: stack.timeBlock.rawValue, currentCount: stacksInTimeBlock) {
                         selectedSuggestedStack = nil
                         showPaywall = true
                         return
@@ -253,6 +258,13 @@ struct ContentView: View {
             NotificationManager.shared.scheduleNotifications(for: habitStacks)
             // Analyze habits for intelligence suggestions
             intelligence.analyze(stacks: habitStacks)
+            // Sync theme state
+            isMinimalistMode = ThemeManager.shared.isMinimalist
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .themeDidChange)) { _ in
+            withAnimation(.cosmosStandard) {
+                isMinimalistMode = ThemeManager.shared.isMinimalist
+            }
         }
         .onChange(of: habitStacks.count) { _, _ in
             // Reschedule notifications when stacks are added/removed
@@ -265,41 +277,49 @@ struct ContentView: View {
 
 // MARK: - Cosmic Background
 struct CosmicBackgroundView: View {
+    var isMinimalist: Bool = ThemeManager.shared.isMinimalist
+
     var body: some View {
         ZStack {
-            // Base gradient
-            LinearGradient(
-                colors: [
-                    Color.cosmicBlack,
-                    Color.cosmicDeep,
-                    Color(red: 0.10, green: 0.05, blue: 0.18),
-                    Color.cosmicBlack
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-            
-            // Nebula glow - top right
-            Circle()
-                .fill(Color.nebulaMagenta.opacity(0.15))
-                .frame(width: 300, height: 300)
-                .blur(radius: 80)
-                .offset(x: 150, y: -200)
-            
-            // Nebula glow - bottom left
-            Circle()
-                .fill(Color.nebulaPurple.opacity(0.12))
-                .frame(width: 350, height: 350)
-                .blur(radius: 100)
-                .offset(x: -150, y: 400)
-            
-            // Subtle cyan accent
-            Circle()
-                .fill(Color.nebulaCyan.opacity(0.08))
-                .frame(width: 200, height: 200)
-                .blur(radius: 60)
-                .offset(x: 100, y: 200)
+            if isMinimalist {
+                // Minimalist: solid dark background
+                Color.minBackground
+                    .ignoresSafeArea()
+            } else {
+                // Cosmic: gradient with nebula glows
+                LinearGradient(
+                    colors: [
+                        Color.cosmicBlack,
+                        Color.cosmicDeep,
+                        Color(red: 0.10, green: 0.05, blue: 0.18),
+                        Color.cosmicBlack
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+
+                // Nebula glow - top right
+                Circle()
+                    .fill(Color.nebulaMagenta.opacity(0.15))
+                    .frame(width: 300, height: 300)
+                    .blur(radius: 80)
+                    .offset(x: 150, y: -200)
+
+                // Nebula glow - bottom left
+                Circle()
+                    .fill(Color.nebulaPurple.opacity(0.12))
+                    .frame(width: 350, height: 350)
+                    .blur(radius: 100)
+                    .offset(x: -150, y: 400)
+
+                // Subtle cyan accent
+                Circle()
+                    .fill(Color.nebulaCyan.opacity(0.08))
+                    .frame(width: 200, height: 200)
+                    .blur(radius: 60)
+                    .offset(x: 100, y: 200)
+            }
         }
     }
 }
@@ -315,6 +335,7 @@ struct HeaderView: View {
     let onStreakTap: () -> Void
     let onInspirationTap: () -> Void
     let onInsightsTap: () -> Void
+    var isMinimalist: Bool = ThemeManager.shared.isMinimalist
 
     @State private var showStreakMessage = false
     @StateObject private var intelligence = IntelligenceEngine.shared
@@ -327,16 +348,41 @@ struct HeaderView: View {
         !intelligence.getHighPrioritySuggestions().isEmpty
     }
 
+    // Theme colors
+    private var textPrimary: Color {
+        isMinimalist ? .minTextPrimary : .white
+    }
+
+    private var textSecondary: Color {
+        isMinimalist ? .minTextSecondary : .nebulaLavender.opacity(0.7)
+    }
+
+    private var cardBg: Color {
+        isMinimalist ? .minCard : .cardBackground
+    }
+
+    private var accentCyan: Color {
+        isMinimalist ? .white : .nebulaCyan
+    }
+
+    private var accentGold: Color {
+        isMinimalist ? .minWarning : .nebulaGold
+    }
+
+    private var accentMagenta: Color {
+        isMinimalist ? .minDestructive : .nebulaMagenta
+    }
+
     var body: some View {
         VStack(spacing: CosmosSpacing.sm) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Today")
                         .font(.title.bold())
-                        .foregroundColor(.white)
+                        .foregroundColor(textPrimary)
                     Text(Date().formatted(date: .abbreviated, time: .omitted))
                         .font(.subheadline)
-                        .foregroundColor(.nebulaLavender.opacity(0.7))
+                        .foregroundColor(textSecondary)
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Today, \(Date().formatted(date: .long, time: .omitted))")
@@ -349,18 +395,18 @@ struct HeaderView: View {
                         ZStack(alignment: .topTrailing) {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 16))
-                                .foregroundColor(.nebulaCyan)
+                                .foregroundColor(accentCyan)
                                 .frame(width: 36, height: 36)
-                                .background(Color.cardBackground.opacity(0.8))
+                                .background(cardBg.opacity(0.8))
                                 .clipShape(Circle())
                                 .overlay(
                                     Circle()
-                                        .stroke(Color.nebulaCyan.opacity(0.3), lineWidth: 1)
+                                        .stroke(accentCyan.opacity(0.3), lineWidth: 1)
                                 )
 
                             if hasHighPrioritySuggestions {
                                 Circle()
-                                    .fill(Color.nebulaMagenta)
+                                    .fill(accentMagenta)
                                     .frame(width: 8, height: 8)
                                     .offset(x: 2, y: -2)
                             }
@@ -373,13 +419,13 @@ struct HeaderView: View {
                 Button(action: onInspirationTap) {
                     Image(systemName: "lightbulb.fill")
                         .font(.system(size: 16))
-                        .foregroundColor(.nebulaGold)
+                        .foregroundColor(accentGold)
                         .frame(width: 36, height: 36)
-                        .background(Color.cardBackground.opacity(0.8))
+                        .background(cardBg.opacity(0.8))
                         .clipShape(Circle())
                         .overlay(
                             Circle()
-                                .stroke(Color.nebulaGold.opacity(0.3), lineWidth: 1)
+                                .stroke(accentGold.opacity(0.3), lineWidth: 1)
                         )
                 }
                 .accessibilityLabel("Get inspiration for new habits")
@@ -393,32 +439,32 @@ struct HeaderView: View {
                 }) {
                     Image(systemName: "flame.fill")
                         .font(.system(size: 16))
-                        .foregroundColor(.nebulaMagenta)
+                        .foregroundColor(accentMagenta)
                         .frame(width: 36, height: 36)
-                        .background(Color.cardBackground.opacity(0.8))
+                        .background(cardBg.opacity(0.8))
                         .clipShape(Circle())
                         .overlay(
                             Circle()
-                                .stroke(Color.nebulaMagenta.opacity(0.3), lineWidth: 1)
+                                .stroke(accentMagenta.opacity(0.3), lineWidth: 1)
                         )
                 }
                 .accessibilityLabel("\(currentStreak) day streak")
                 .accessibilityHint("Double tap to view statistics")
 
                 // Profile menu
-                ProfileMenuView()
+                ProfileMenuView(isMinimalist: isMinimalist)
             }
 
             // Streak milestone message
             if let message = streakMessage, showStreakMessage {
                 Text(message)
                     .font(.caption)
-                    .foregroundColor(.nebulaGold)
+                    .foregroundColor(accentGold)
                     .padding(.horizontal, CosmosSpacing.md)
                     .padding(.vertical, CosmosSpacing.sm)
                     .background(
                         Capsule()
-                            .fill(Color.nebulaGold.opacity(0.15))
+                            .fill(accentGold.opacity(0.15))
                     )
                     .transition(.opacity.combined(with: .scale))
                     .onAppear {
@@ -437,19 +483,28 @@ struct HeaderView: View {
 
 // MARK: - Profile Menu
 struct ProfileMenuView: View {
+    var isMinimalist: Bool = ThemeManager.shared.isMinimalist
     @State private var showProfileSheet: Bool = false
+
+    private var accentColor: Color {
+        isMinimalist ? .minTextSecondary : .nebulaLavender
+    }
+
+    private var cardBg: Color {
+        isMinimalist ? .minCard : .cardBackground
+    }
 
     var body: some View {
         Button(action: { showProfileSheet = true }) {
             Image(systemName: "person.fill")
                 .font(.system(size: 16))
-                .foregroundColor(.nebulaLavender)
+                .foregroundColor(accentColor)
                 .frame(width: 36, height: 36)
-                .background(Color.cardBackground.opacity(0.8))
+                .background(cardBg.opacity(0.8))
                 .clipShape(Circle())
                 .overlay(
                     Circle()
-                        .stroke(Color.nebulaLavender.opacity(0.3), lineWidth: 1)
+                        .stroke(accentColor.opacity(0.3), lineWidth: 1)
                 )
         }
         .sheet(isPresented: $showProfileSheet) {
@@ -467,11 +522,12 @@ struct ProfileView: View {
     @State private var showPaywall: Bool = false
     @State private var notificationsEnabled: Bool = true
     @State private var hapticFeedbackEnabled: Bool = true
+    @State private var isMinimalistMode: Bool = ThemeManager.shared.isMinimalist
 
     var body: some View {
         NavigationView {
             ZStack {
-                Color.cosmicBlack.ignoresSafeArea()
+                (isMinimalistMode ? Color.minBackground : Color.cosmicBlack).ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: CosmosSpacing.xl) {
@@ -486,6 +542,9 @@ struct ProfileView: View {
 
                         // Account Section
                         accountSection
+
+                        // Developer Section
+                        developerSection
 
                         // App Info
                         appInfoSection
@@ -515,6 +574,11 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showPaywall) {
             CosmosPaywallView()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .themeDidChange)) { _ in
+            withAnimation(.cosmosStandard) {
+                isMinimalistMode = ThemeManager.shared.isMinimalist
+            }
         }
     }
 
@@ -685,6 +749,37 @@ struct ProfileView: View {
                     Divider()
                         .background(Color.nebulaLavender.opacity(0.1))
 
+                    // Theme (Minimalist Mode - Premium)
+                    Button(action: {
+                        if subscriptionService.canAccess(.minimalistMode) {
+                            withAnimation(.cosmosStandard) {
+                                ThemeManager.shared.currentTheme = ThemeManager.shared.isMinimalist ? .cosmic : .minimalist
+                            }
+                            HapticManager.shared.play(.selection)
+                        } else {
+                            showPaywall = true
+                        }
+                    }) {
+                        SettingsRow(
+                            icon: ThemeManager.shared.currentTheme.icon,
+                            iconColor: .nebulaGold,
+                            title: "Theme",
+                            isPremium: !subscriptionService.canAccess(.minimalistMode)
+                        ) {
+                            HStack(spacing: 4) {
+                                Text(ThemeManager.shared.currentTheme.displayName)
+                                    .font(.subheadline)
+                                    .foregroundColor(.nebulaLavender.opacity(0.5))
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.nebulaLavender.opacity(0.3))
+                            }
+                        }
+                    }
+
+                    Divider()
+                        .background(Color.nebulaLavender.opacity(0.1))
+
                     // App Icon (Premium)
                     SettingsRow(
                         icon: "app.fill",
@@ -798,6 +893,48 @@ struct ProfileView: View {
         }
         .padding(.top, CosmosSpacing.lg)
     }
+
+    // MARK: - Developer Section
+    private var developerSection: some View {
+        VStack(alignment: .leading, spacing: CosmosSpacing.md) {
+            Text("Developer")
+                .font(.headline)
+                .foregroundColor(.white)
+
+            CosmosCard {
+                VStack(spacing: 0) {
+                    SettingsRow(
+                        icon: "hammer.fill",
+                        iconColor: .nebulaGold,
+                        title: "Dev Mode"
+                    ) {
+                        Toggle("", isOn: Binding(
+                            get: { subscriptionService.isDevModeEnabled },
+                            set: { subscriptionService.isDevModeEnabled = $0 }
+                        ))
+                        .labelsHidden()
+                        .tint(.nebulaGold)
+                    }
+
+                    if subscriptionService.isDevModeEnabled {
+                        Divider()
+                            .background(Color.nebulaLavender.opacity(0.1))
+
+                        HStack {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundColor(.nebulaGold)
+                            Text("Premium features unlocked")
+                                .font(.caption)
+                                .foregroundColor(.nebulaGold)
+                            Spacer()
+                        }
+                        .padding(.vertical, CosmosSpacing.sm)
+                        .padding(.horizontal, CosmosSpacing.xs)
+                    }
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Settings Row
@@ -805,30 +942,43 @@ struct SettingsRow<Accessory: View>: View {
     let icon: String
     let iconColor: Color
     let title: String
-    var titleColor: Color = .white
+    var titleColor: Color? = nil
     var isPremium: Bool = false
+    var isMinimalist: Bool = ThemeManager.shared.isMinimalist
     @ViewBuilder let accessory: () -> Accessory
+
+    private var textPrimary: Color {
+        titleColor ?? (isMinimalist ? .minTextPrimary : .white)
+    }
+
+    private var accentGold: Color {
+        isMinimalist ? .minWarning : .nebulaGold
+    }
+
+    private var displayIconColor: Color {
+        isMinimalist ? .white : iconColor
+    }
 
     var body: some View {
         HStack(spacing: CosmosSpacing.md) {
             Image(systemName: icon)
                 .font(.system(size: 16))
-                .foregroundColor(iconColor)
+                .foregroundColor(displayIconColor)
                 .frame(width: 32, height: 32)
-                .background(iconColor.opacity(0.15))
+                .background(displayIconColor.opacity(0.15))
                 .cornerRadius(8)
 
             Text(title)
                 .font(.subheadline)
-                .foregroundColor(titleColor)
+                .foregroundColor(textPrimary)
 
             if isPremium {
                 Text("PRO")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(.nebulaGold)
+                    .foregroundColor(accentGold)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Color.nebulaGold.opacity(0.2))
+                    .background(accentGold.opacity(0.2))
                     .cornerRadius(4)
             }
 
@@ -845,10 +995,14 @@ struct SettingsRow<Accessory: View>: View {
 struct TodayStatsView: View {
     let completedCount: Int
     let animationTrigger: UUID
+    var isMinimalist: Bool = ThemeManager.shared.isMinimalist
     @State private var displayedCount: Int = 0
     @State private var previousCount: Int = 0
 
     var accentColor: Color {
+        if isMinimalist {
+            return displayedCount == 0 ? .minTextTertiary : .minTextPrimary
+        }
         switch displayedCount {
         case 0:
             return .nebulaLavender.opacity(0.6)
@@ -863,33 +1017,41 @@ struct TodayStatsView: View {
         }
     }
 
+    private var textSecondary: Color {
+        isMinimalist ? .minTextTertiary : .nebulaLavender.opacity(0.6)
+    }
+
     var body: some View {
         ZStack {
-            // Cosmic Arc
-            CosmicArcView()
+            // Cosmic Arc (hidden in minimalist mode)
+            if !isMinimalist {
+                CosmicArcView()
+            }
 
             // Stats overlay - centered in arc
             VStack(spacing: 4) {
                 Text("\(displayedCount)")
                     .font(.system(size: 64, weight: .bold, design: .rounded))
                     .foregroundStyle(
-                        LinearGradient(
-                            colors: [accentColor, accentColor.opacity(0.7)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
+                        isMinimalist
+                            ? AnyShapeStyle(accentColor)
+                            : AnyShapeStyle(LinearGradient(
+                                colors: [accentColor, accentColor.opacity(0.7)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ))
                     )
-                    .shadow(color: accentColor.opacity(0.5), radius: 10)
+                    .shadow(color: isMinimalist ? .clear : accentColor.opacity(0.5), radius: 10)
                     .contentTransition(.numericText())
                     .animation(.easeOut(duration: 0.12), value: displayedCount)
 
                 Text("habits completed")
                     .font(.caption)
-                    .foregroundColor(.nebulaLavender.opacity(0.6))
+                    .foregroundColor(textSecondary)
             }
-            .offset(y: 20)
+            .offset(y: isMinimalist ? 0 : 20)
         }
-        .frame(height: 160)
+        .frame(height: isMinimalist ? 100 : 160)
         .padding(.vertical, 8)
         .onAppear {
             displayedCount = completedCount
@@ -1040,6 +1202,7 @@ struct TimeBlockCard: View {
     var isComplete: Bool = false
     let onStackTap: (HabitStack) -> Void
     let onAddTap: () -> Void
+    var isMinimalist: Bool = ThemeManager.shared.isMinimalist
 
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @State private var isExpanded: Bool = true
@@ -1047,6 +1210,31 @@ struct TimeBlockCard: View {
 
     private var animation: Animation {
         reduceMotion ? .linear(duration: 0.01) : .cosmosStandard
+    }
+
+    // Theme-aware colors
+    private var accentColor: Color {
+        isMinimalist ? .white : timeBlock.color
+    }
+
+    private var textPrimary: Color {
+        isMinimalist ? .minTextPrimary : .white
+    }
+
+    private var textSecondary: Color {
+        isMinimalist ? .minTextSecondary : .nebulaLavender.opacity(0.8)
+    }
+
+    private var textTertiary: Color {
+        isMinimalist ? .minTextTertiary : .nebulaLavender.opacity(0.5)
+    }
+
+    private var cardBg: Color {
+        isMinimalist ? .minCard : .cardBackground
+    }
+
+    private var successColor: Color {
+        isMinimalist ? .minSuccess : .nebulaCyan
     }
 
     var body: some View {
@@ -1062,17 +1250,17 @@ struct TimeBlockCard: View {
                 }) {
                     HStack {
                         Image(systemName: timeBlock.icon)
-                            .foregroundColor(isComplete ? timeBlock.color.opacity(0.5) : timeBlock.color)
+                            .foregroundColor(isComplete ? accentColor.opacity(0.5) : accentColor)
                             .font(.title2)
-                            .shadow(color: isComplete ? .clear : timeBlock.color.opacity(0.5), radius: 4)
+                            .shadow(color: isMinimalist ? .clear : (isComplete ? .clear : timeBlock.color.opacity(0.5)), radius: 4)
 
                         Text(timeBlock.rawValue)
                             .font(.headline)
-                            .foregroundColor(isComplete ? .nebulaLavender.opacity(0.5) : .white)
+                            .foregroundColor(isComplete ? textTertiary : textPrimary)
 
                         if isComplete {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.nebulaCyan.opacity(0.6))
+                                .foregroundColor(successColor.opacity(0.6))
                                 .font(.subheadline)
                         }
 
@@ -1092,10 +1280,10 @@ struct TimeBlockCard: View {
                 }) {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(isComplete ? .nebulaLavender.opacity(0.5) : .nebulaLavender.opacity(0.8))
+                        .foregroundColor(isComplete ? textTertiary : textSecondary)
                         .rotationEffect(.degrees(isExpanded ? 0 : -90))
                         .frame(width: 32, height: 32)
-                        .background(Color.white.opacity(0.05))
+                        .background(isMinimalist ? Color.minSubtle : Color.white.opacity(0.05))
                         .cornerRadius(CosmosRadius.sm)
                 }
                 .buttonStyle(.plain)
@@ -1104,9 +1292,9 @@ struct TimeBlockCard: View {
                 // Add stack button - always bright
                 Button(action: onAddTap) {
                     Image(systemName: "plus.circle.fill")
-                        .foregroundColor(timeBlock.color)
+                        .foregroundColor(accentColor)
                         .font(.title2)
-                        .shadow(color: timeBlock.color.opacity(0.4), radius: 4)
+                        .shadow(color: isMinimalist ? .clear : timeBlock.color.opacity(0.4), radius: 4)
                 }
                 .accessibilityLabel("Add new stack to \(timeBlock.rawValue)")
             }
@@ -1116,14 +1304,14 @@ struct TimeBlockCard: View {
                 if stacks.isEmpty {
                     Text("No habits yet. Tap + to create your first one.")
                         .font(.subheadline)
-                        .foregroundColor(.nebulaLavender.opacity(0.5))
+                        .foregroundColor(textTertiary)
                         .padding()
                         .frame(maxWidth: .infinity)
-                        .background(Color.white.opacity(0.03))
+                        .background(isMinimalist ? Color.minSubtle.opacity(0.5) : Color.white.opacity(0.03))
                         .cornerRadius(CosmosRadius.md)
                 } else {
                     ForEach(stacks) { stack in
-                        HabitStackCard(stack: stack)
+                        HabitStackCard(stack: stack, isMinimalist: isMinimalist)
                             .onTapGesture {
                                 onStackTap(stack)
                             }
@@ -1137,10 +1325,15 @@ struct TimeBlockCard: View {
         .padding()
         .background(
             RoundedRectangle(cornerRadius: CosmosRadius.lg)
-                .fill(Color.cardBackground.opacity(isComplete ? 0.4 : 0.7))
+                .fill(cardBg.opacity(isComplete ? 0.4 : 0.7))
                 .overlay(
                     RoundedRectangle(cornerRadius: CosmosRadius.lg)
-                        .stroke(isComplete ? Color.nebulaCyan.opacity(0.2) : timeBlock.color.opacity(0.15), lineWidth: 1)
+                        .stroke(
+                            isMinimalist
+                                ? Color.minSubtle.opacity(isComplete ? 0.1 : 0.2)
+                                : (isComplete ? Color.nebulaCyan.opacity(0.2) : timeBlock.color.opacity(0.15)),
+                            lineWidth: 1
+                        )
                 )
         )
         .opacity(isComplete ? 0.7 : 1.0)
@@ -1165,6 +1358,7 @@ struct TimeBlockCard: View {
 // MARK: - Habit Stack Card (Compact)
 struct HabitStackCard: View {
     let stack: HabitStack
+    var isMinimalist: Bool = ThemeManager.shared.isMinimalist
 
     var completedCount: Int {
         stack.habits.filter { $0.isCompleted }.count
@@ -1182,21 +1376,46 @@ struct HabitStackCard: View {
         completedCount == totalHabits && totalHabits > 0
     }
 
+    // Theme colors
+    private var accentColor: Color {
+        isMinimalist ? .white : stack.color
+    }
+
+    private var textPrimary: Color {
+        isMinimalist ? .minTextPrimary : .white
+    }
+
+    private var textSecondary: Color {
+        isMinimalist ? .minTextSecondary : .nebulaLavender.opacity(0.7)
+    }
+
+    private var textTertiary: Color {
+        isMinimalist ? .minTextTertiary : .nebulaLavender.opacity(0.5)
+    }
+
+    private var successColor: Color {
+        isMinimalist ? .minSuccess : .nebulaCyan
+    }
+
+    private var cardBg: Color {
+        isMinimalist ? .minElevated : .cosmicDeep
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             // Anchor icon
             ZStack {
                 Circle()
-                    .fill(isComplete ? stack.color.opacity(0.2) : Color.white.opacity(0.05))
+                    .fill(isComplete ? accentColor.opacity(0.2) : (isMinimalist ? Color.minSubtle : Color.white.opacity(0.05)))
                     .frame(width: 48, height: 48)
 
                 Circle()
-                    .stroke(isComplete ? stack.color.opacity(0.5) : stack.color.opacity(0.2), lineWidth: 1.5)
+                    .stroke(isComplete ? accentColor.opacity(0.5) : accentColor.opacity(0.2), lineWidth: 1.5)
                     .frame(width: 48, height: 48)
 
                 Image(systemName: firstHabitIcon)
                     .font(.system(size: 20))
-                    .foregroundColor(isComplete ? stack.color : .nebulaLavender.opacity(0.7))
+                    .foregroundColor(isComplete ? accentColor : textSecondary)
             }
 
             // Stack info
@@ -1204,23 +1423,23 @@ struct HabitStackCard: View {
                 HStack(spacing: 6) {
                     Text(stack.name)
                         .font(.subheadline.bold())
-                        .foregroundColor(.white)
+                        .foregroundColor(textPrimary)
                         .lineLimit(1)
 
                     if isComplete {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 14))
-                            .foregroundColor(.nebulaCyan)
+                            .foregroundColor(successColor)
                     }
                 }
 
                 HStack(spacing: 4) {
                     Image(systemName: "bell.fill")
                         .font(.system(size: 10))
-                        .foregroundColor(.nebulaCyan.opacity(0.6))
+                        .foregroundColor(successColor.opacity(0.6))
                     Text(stack.anchorHabit)
                         .font(.caption)
-                        .foregroundColor(.nebulaLavender.opacity(0.5))
+                        .foregroundColor(textTertiary)
                         .lineLimit(1)
                 }
             }
@@ -1233,29 +1452,34 @@ struct HabitStackCard: View {
                 HStack(spacing: 3) {
                     ForEach(0..<min(totalHabits, 5), id: \.self) { index in
                         Circle()
-                            .fill(index < completedCount ? stack.color : Color.nebulaLavender.opacity(0.2))
+                            .fill(index < completedCount ? accentColor : (isMinimalist ? Color.minSubtle : Color.nebulaLavender.opacity(0.2)))
                             .frame(width: 6, height: 6)
                     }
                     if totalHabits > 5 {
                         Text("+")
                             .font(.system(size: 8))
-                            .foregroundColor(.nebulaLavender.opacity(0.4))
+                            .foregroundColor(textTertiary)
                     }
                 }
 
                 // Count
                 Text("\(completedCount)/\(totalHabits) habits")
                     .font(.caption2)
-                    .foregroundColor(.nebulaLavender.opacity(0.5))
+                    .foregroundColor(textTertiary)
             }
         }
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.cosmicDeep)
+                .fill(cardBg)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(isComplete ? stack.color.opacity(0.4) : stack.color.opacity(0.15), lineWidth: 1)
+                        .stroke(
+                            isMinimalist
+                                ? Color.minSubtle.opacity(isComplete ? 0.3 : 0.15)
+                                : (isComplete ? stack.color.opacity(0.4) : stack.color.opacity(0.15)),
+                            lineWidth: 1
+                        )
                 )
         )
     }

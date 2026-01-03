@@ -24,7 +24,7 @@ enum SubscriptionProductID: String {
 
     var displayPrice: String {
         switch self {
-        case .monthlyPremium: return "$7.99/mo"
+        case .monthlyPremium: return "$4.99/mo"
         case .yearlyPremium: return "$49.99/yr"
         case .lifetimePremium: return "$149.99"
         }
@@ -41,9 +41,17 @@ class SubscriptionService: ObservableObject {
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var error: String?
 
+    // MARK: - Dev Mode
+    @Published var isDevModeEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isDevModeEnabled, forKey: "devModeEnabled")
+        }
+    }
+
     private var updateListenerTask: Task<Void, Error>?
 
     private init() {
+        self.isDevModeEnabled = UserDefaults.standard.bool(forKey: "devModeEnabled")
         updateListenerTask = listenForTransactions()
         Task {
             await loadProducts()
@@ -57,7 +65,7 @@ class SubscriptionService: ObservableObject {
 
     // MARK: - Premium Status
     var isPremium: Bool {
-        !purchasedProductIDs.isEmpty
+        isDevModeEnabled || !purchasedProductIDs.isEmpty
     }
 
     var hasLifetime: Bool {
@@ -69,12 +77,13 @@ class SubscriptionService: ObservableObject {
         isPremium
     }
 
-    func canCreateMoreStacks(currentCount: Int) -> Bool {
-        isPremium || currentCount < FeatureLimits.freeHabitStacks
+    func canCreateStack(inTimeBlock timeBlock: String, currentCount: Int) -> Bool {
+        isPremium || currentCount < FeatureLimits.freeStacksPerTimeBlock
     }
 
-    func canAddMoreHabits(currentCount: Int) -> Bool {
-        isPremium || currentCount < FeatureLimits.freeHabitsPerStack
+    func canAddHabitToStack() -> Bool {
+        // Habits per stack are unlimited in free tier
+        true
     }
 
     func maxCalendarWeeks() -> Int {
