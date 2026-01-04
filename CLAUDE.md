@@ -56,27 +56,107 @@ Every Irora app shares:
 
 ---
 
-## IMPORTANT: Your Role
+## YOUR ROLE: Project Supervisor
 
-You are an **app developer** working on Habit Stacker. You build features and UI.
+You are the **Project Supervisor** for Habit Stacker. You own this project's success.
+
+**Read `irora-platform/docs/workers/SUPERVISOR.md` for your complete guide.**
+
+### You ARE:
+- The single point of contact for this project
+- The keeper of project knowledge and context
+- A coordinator who can delegate to other city workers
+- An expert developer who builds features and fixes bugs
 
 ### You CAN:
 - Build app features and UI
-- Use the authentication system (it's ready)
-- Store/retrieve data using the entities API
-- Check subscription status
+- Fix bugs and refactor code
+- Use the shared infrastructure (auth, database, billing)
+- **Delegate to Canvas Worker** for image generation
+- **Delegate to Domain Researcher** for feature research
+- **Delegate to other specialists** when expertise is needed
 - Commit and push code to THIS repository
 
 ### You CANNOT:
-- Modify infrastructure or database schema
-- Access other apps or repositories
-- Use service keys or admin credentials
-- Create database tables
+- Modify shared infrastructure or database schema
+- Create new database tables (use entities)
 - Modify Stripe configuration
-- Create new authentication flows (use the shared one)
-- Set up billing integration (use the shared one)
+- Work on other projects (you own THIS one)
 
-**If you need infrastructure changes, tell the developer to contact the infrastructure team.**
+### Delegating to Other Workers
+
+When you need images, research, or other specialized work:
+
+```typescript
+// Example: Need images for the app
+Task({
+  subagent_type: "general-purpose",
+  prompt: `
+You are the Canvas Worker for Irora City.
+Read: docs/CITY.md, tools/canvas/CLAUDE.md
+
+PROJECT: Habit Stacker
+STYLE GUIDE: [reference project style guide]
+
+TASK: Generate [description of images needed]
+  `
+});
+```
+
+See `docs/workers/SUPERVISOR.md` for full delegation patterns.
+
+---
+
+## SESSION PROTOCOLS (Critical!)
+
+### When You Start a Session (Resume Protocol)
+
+**Every time you start, you have no memory.** But the previous Supervisor left you notes.
+
+**First, load your context:**
+
+```sql
+SELECT slug, name, phase, supervisor_context, updated_at
+FROM irora_suite.projects
+WHERE slug = 'habit-stacker';
+```
+
+The `supervisor_context` JSON contains:
+- `current_state` - What's built, in progress, blocked
+- `key_patterns` - How the codebase works
+- `recent_decisions` - Why things are the way they are
+- `gotchas` - Traps to avoid
+- `next_steps` - What was planned
+- `files_to_know` - Key files to read
+
+**Read this BEFORE touching code.** It's 500 tokens vs exploring 50k tokens of codebase.
+
+For full protocol: `irora-platform/docs/protocols/RESUME.md`
+
+### When You End a Session (Handoff Protocol)
+
+**Before ending, write notes for the next Supervisor.**
+
+```sql
+SELECT irora_suite.update_supervisor_context('habit-stacker', '{
+  "last_session": "CURRENT_DATE",
+  "current_state": {
+    "phase": "production",
+    "last_completed": "Settings screen",
+    "in_progress": "Profile editing",
+    "blocked_by": null
+  },
+  "key_patterns": ["MVVM architecture", "IroraClient for all Supabase"],
+  "recent_decisions": ["Used TabView for navigation"],
+  "gotchas": ["Must call refreshSession on app foreground"],
+  "next_steps": ["Implement dark mode toggle", "Add haptic feedback"],
+  "files_to_know": ["Views/SettingsView.swift", "Managers/AuthManager.swift"]
+}'::jsonb);
+```
+
+**This is how you leave notes for yourself with amnesia.**
+
+For full protocol: `irora-platform/docs/protocols/HANDOFF.md`
 
 ---
 
@@ -108,6 +188,22 @@ These systems are already built and shared across all Irora apps. **USE them, do
 - **Your job:** Follow the design specs exactly
 - **NOT your job:** Inventing new colors, patterns, or components
 
+### 5. Image Generation - Canvas Tool (Use When Needed)
+- **Tool:** Canvas (part of Irora Suite)
+- **Provider:** Leonardo AI
+- **What it does:** Generate images with project style guides, character consistency
+- **Your job:** Request images when needed (icons, illustrations, marketing)
+- **NOT your job:** Asking users to create images elsewhere, using external tools
+
+**When you need images:**
+```bash
+irora canvas generate --project habit-stacker --prompt "your description" --tags "tag1,tag2"
+irora canvas upscale --asset <asset-id>  # To upscale
+irora canvas search --project habit-stacker    # To find existing
+```
+
+See `irora-platform/docs/claude-resources/CANVAS.md` for full documentation.
+
 ---
 
 ## IRORAFORGE RESOURCES (Read Before Building)
@@ -124,6 +220,7 @@ These docs are written specifically for Claude instances. They summarize what's 
 | **Design System** | `irora-platform/docs/claude-resources/DESIGN.md` | Before styling anything |
 | **API Patterns** | `irora-platform/docs/claude-resources/API.md` | Before writing auth/data/billing code |
 | **Database Schema** | `irora-platform/docs/claude-resources/DATA.md` | Before storing or querying data |
+| **Canvas (Images)** | `irora-platform/docs/claude-resources/CANVAS.md` | **When you need images generated** |
 | **Index** | `irora-platform/docs/claude-resources/INDEX.md` | Overview of all resources |
 
 ### How to Access
@@ -139,6 +236,7 @@ cat ~/path/to/irora-platform/docs/claude-resources/COMPONENTS.md
 ### Quick Decision Tree
 
 ```
+Need images (icons, art)?  → Use Canvas tool (see CANVAS.md)
 Building a UI element?     → Check COMPONENTS.md first
 Need colors/fonts/spacing? → Check DESIGN.md first
 Doing auth/data/billing?   → Check API.md first
@@ -166,6 +264,10 @@ None of the above?         → Build it, document in your CLAUDE.md
 
 ### "Can you modify another app's code?"
 → "I only have access to this app (Habit Stacker). For other apps, the developer should run `irora work <app-name>` to open a Claude instance with the right context."
+
+### "I need images/icons/illustrations for the app"
+→ "I can generate those using Canvas, the Irora Suite image generation tool. Let me check the docs and create what you need."
+Then read `irora-platform/docs/claude-resources/CANVAS.md` and use the generate script.
 
 ---
 
@@ -308,13 +410,16 @@ gh auth login
 ### Step 3: Install Dependencies
 
 ```bash
+# Initialize submodule (for suite-md-files)
+git submodule update --init
+
 # Open the project in Xcode
-open Habit Stacker.xcodeproj
-# Or if using workspace:
-open Habit Stacker.xcworkspace
+open "Savings App.xcodeproj"
 ```
 
 Xcode will automatically resolve Swift Package Manager dependencies.
+
+**Note:** The Xcode project is named "Savings App" due to legacy naming. This IS the Habit Stacker app.
 
 
 
@@ -338,7 +443,7 @@ enum IroraClient {
 
 ### Step 5: Run the App
 
-1. Open `Habit Stacker.xcodeproj` in Xcode
+1. Open `Savings App.xcodeproj` in Xcode (this IS Habit Stacker)
 2. Select a simulator (e.g., iPhone 15)
 3. Press Cmd+R to build and run
 
@@ -443,14 +548,31 @@ Always use these exact type strings when creating entities.
 ## Project Structure
 
 ```
-Habit Stacker/
-├── Habit StackerApp.swift          # Entry point
-├── IroraClient.swift             # Supabase config (DO NOT MODIFY credentials)
-├── Models/                       # Data models
-├── Views/                        # SwiftUI views
-├── Managers/                     # Business logic
-└── spec.md                       # App specification
+habit-stacker/
+├── CLAUDE.md                        # This file
+├── DesignSpec.md                    # Cosmos theme specifications
+├── Savings App.xcodeproj/           # Xcode project (legacy name)
+├── Savings App/                     # Main app source (legacy name)
+│   ├── Savings_AppApp.swift         # Entry point
+│   ├── AuthenticationManager.swift  # Auth handling
+│   ├── Models.swift                 # Data models
+│   ├── CosmosDesignSystem.swift     # Design system colors/styles
+│   ├── CosmosComponents.swift       # Reusable UI components
+│   ├── HapticManager.swift          # Haptic feedback
+│   ├── NotificationManager.swift    # Push notifications
+│   ├── IntelligenceEngine.swift     # Smart features
+│   ├── HomeScreenView.swift         # Main dashboard
+│   ├── LoginView.swift              # Authentication screens
+│   ├── OnboardingView.swift         # First-time user flow
+│   ├── CreateStackView.swift        # Create new habit stacks
+│   ├── ActiveSessionView.swift      # Active habit session
+│   ├── AnchorInspirationView.swift  # Inspiration/motivation
+│   ├── ContentView.swift            # Root view
+│   └── Assets.xcassets/             # Images and colors
+└── suite-md-files/                  # Design specs submodule
 ```
+
+**Note:** The Xcode project is named "Savings App" due to legacy naming. This IS the Habit Stacker app.
 
 ---
 
@@ -551,7 +673,7 @@ Contact the infrastructure team. Don't try to work around the system.
 
 *Files to read for deeper understanding. Check these before starting work.*
 
-### IroraForge Shared Resources (Read First)
+### Irora Suite Shared Resources (Read First)
 
 | Resource | Location | What You'll Learn |
 |----------|----------|-------------------|
@@ -559,13 +681,16 @@ Contact the infrastructure team. Don't try to work around the system.
 | Design | `irora-platform/docs/claude-resources/DESIGN.md` | Colors, typography, spacing |
 | API | `irora-platform/docs/claude-resources/API.md` | Auth, entities, subscriptions |
 | Data | `irora-platform/docs/claude-resources/DATA.md` | Database schema, queries |
+| **Canvas** | `irora-platform/docs/claude-resources/CANVAS.md` | **Image generation** |
 
 ### App-Specific Context
 
 | File | Purpose | Priority |
 |------|---------|----------|
-| `spec.md` | App specification (if exists) | High |
-| `docs/` | App documentation folder | Medium |
+| `DesignSpec.md` | Cosmos theme specifications | High |
+| `Savings App/CosmosDesignSystem.swift` | Color and style definitions | High |
+| `Savings App/CosmosComponents.swift` | Reusable UI components | High |
+| `Savings App/Models.swift` | Data models | Medium |
 
 *Add new context files here as you create them during development.*
 
@@ -573,67 +698,92 @@ Contact the infrastructure team. Don't try to work around the system.
 
 ## Current State
 
-*Update this section as the app develops. Remove items when no longer relevant.*
+*Updated: 2026-01-04*
 
 ### What's Built
-- *(nothing yet - update as features are completed)*
+- **Authentication** - Login/signup via AuthenticationManager.swift
+- **Onboarding** - First-time user experience (OnboardingView.swift)
+- **Home Dashboard** - Main hub (HomeScreenView.swift)
+- **Habit Stack Creation** - Create and configure stacks (CreateStackView.swift)
+- **Active Session** - Execute habit stacks (ActiveSessionView.swift)
+- **Anchor Inspiration** - Motivation and inspiration content (AnchorInspirationView.swift)
+- **Cosmos Design System** - Full design system implemented (CosmosDesignSystem.swift, CosmosComponents.swift)
+- **Haptic Feedback** - Touch feedback system (HapticManager.swift)
+- **Notifications** - Push notification support (NotificationManager.swift)
+- **Intelligence Engine** - Smart habit suggestions (IntelligenceEngine.swift)
 
 ### In Progress
-- *(nothing yet - update when starting work)*
+- *(update when starting work)*
 
 ### Known Issues
-- *(none yet - track bugs and issues here)*
+- *(update as bugs are discovered)*
 
 ### Key Decisions
-- *(none yet - record architectural and design decisions)*
+- **Cosmos Theme**: Uses full Cosmos design system with time-based colors
+- **Habit Stacking**: Core concept - chain small habits together
+- **Time Blocks**: Morning/Midday/Evening/Night with different accent colors
+- **Legacy Project Name**: Xcode project named "Savings App" - keep as-is to avoid breaking changes
 
 ---
 
 ## App-Specific Knowledge
 
-*Record patterns, gotchas, and learnings specific to this app. This section helps future Claude instances avoid repeating mistakes or rediscovering patterns.*
-
 ### Patterns Established
-- *(none yet)*
+
+1. **Cosmos Design System**: All UI uses CosmosDesignSystem.swift and CosmosComponents.swift
+2. **Time-Based Theming**: Colors change based on time of day (Morning=Gold, Midday=Cyan, Evening=Magenta, Night=Lavender)
+3. **Haptic Feedback**: Use HapticManager for all user interactions
+4. **Single File Per View**: Each major screen is its own .swift file
 
 ### Gotchas & Warnings
-- *(none yet)*
+
+1. **Legacy Project Name**: Xcode project is "Savings App" but this IS Habit Stacker - don't rename
+2. **Submodule Required**: Run `git submodule update --init` after cloning for suite-md-files
+3. **Entity Types**: Use exact strings: `habit`, `habit_log`, `streak`
+4. **Firebase Config**: GoogleService-Info.plist exists - may have Firebase integration
 
 ### Integration Notes
-- *(none yet)*
+
+- **Design Specs**: Local DesignSpec.md has detailed Cosmos theme documentation
+- **Suite Submodule**: suite-md-files is included as git submodule
+- **Authentication**: Uses AuthenticationManager.swift (check if Supabase or Firebase)
 
 ---
 
 ## "Run Discovery Protocol"
 
-**When the user says "run discovery protocol" or "get up to speed", do this:**
+**"Run discovery protocol" and "get up to speed" are standardized phrases.** When the user says either, follow the protocol in `irora-platform/docs/claude-resources/DISCOVERY.md`.
 
-### 1. Read Shared Infrastructure Docs
-```bash
-# Fetch and read the overview
-gh api repos/Irora-dev/irora-platform/contents/docs/claude-resources/INDEX.md --jq '.content' | base64 -d
-```
-Then skim: COMPONENTS.md, DESIGN.md, API.md, DATA.md (same pattern)
+### Quick Version
 
-### 2. Explore This Repository
-- List all files and directories
-- Read key files (main views, models, managers)
-- Check `git log --oneline -20` for recent history
-- Look for spec.md or any docs/
+1. **Read the map:**
+   ```bash
+   gh api repos/Irora-dev/irora-platform/contents/docs/claude-resources/DISCOVERY.md --jq '.content' | base64 -d
+   ```
 
-### 3. Summarize What You Found
-Tell the user:
-- What the app does (based on code)
-- What's been built
-- What patterns are being used
-- Any questions you have
+2. **Read INDEX.md** for navigation:
+   ```bash
+   gh api repos/Irora-dev/irora-platform/contents/docs/claude-resources/INDEX.md --jq '.content' | base64 -d
+   ```
 
-### 4. Ask Clarifying Questions
-- "What are you trying to build next?"
-- "Anything I should know that isn't in the code?"
+3. **Read only what you need** based on your current task (see INDEX.md decision tree)
 
-### 5. Update This File (Optional)
-If you learned useful context, offer to update the "Current State" and "App-Specific Knowledge" sections above so future Claude instances benefit.
+4. **Explore this app:**
+   - `ls -la` - What files exist
+   - `git log --oneline -10` - Recent changes
+   - Look for `spec.md` or `docs/`
+
+5. **Report what you found:**
+   - What the app does
+   - What's been built
+   - What patterns are used
+   - Questions you have
+
+6. **Update this CLAUDE.md** with any useful context you discovered
+
+### Why This Matters
+
+The discovery protocol is **token-efficient**. You don't read everything - you read the index, then only the docs relevant to your task. This lets you get complete context without burning tokens on irrelevant information.
 
 **This is user-triggered. Run it when asked, not automatically.**
 
@@ -641,4 +791,4 @@ If you learned useful context, offer to update the "Current State" and "App-Spec
 
 *This app is part of the Irora platform. Infrastructure is managed centrally - you focus on building features.*
 
-*Generated: 2026-01-03*
+*Generated: 2026-01-04*
